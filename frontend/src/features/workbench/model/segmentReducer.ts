@@ -6,6 +6,16 @@ function cloneSegments(segments: Segment[]) {
   return segments.map((segment) => ({ ...segment }));
 }
 
+export function createBlankSegment(length: number): Segment {
+  return {
+    id: "segment-1",
+    start_frame: 0,
+    end_frame: length,
+    text: "",
+    source: "user",
+  };
+}
+
 function commit(state: WorkbenchState, segments: Segment[]): WorkbenchState {
   return {
     segments: cloneSegments(segments),
@@ -70,7 +80,7 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
       return { ...state, segments: next };
     }
     case "clear":
-      return commit(state, []);
+      return commit(state, [createBlankSegment(action.length)]);
     case "undo": {
       const previous = state.past.at(-1);
       if (!previous) return state;

@@ -150,7 +150,8 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("dialog").getByRole("button").last().click();
   await expect.poll(() => clearCalls).toBe(1);
-  await expect(page.locator(".timeline-segment")).toHaveCount(0);
+  await expect(page.locator(".timeline-segment")).toHaveCount(1);
+  await expect(page.locator(".timeline-segment")).toContainText("未填写");
 
   await page.reload();
   await expect(page.getByText("pick the object").first()).toBeVisible();

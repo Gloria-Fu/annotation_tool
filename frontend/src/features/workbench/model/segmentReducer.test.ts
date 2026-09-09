@@ -36,11 +36,13 @@ describe("segmentReducer", () => {
 
   it("supports clear, undo, and redo", () => {
     const initial = createWorkbenchState(segments);
-    const cleared = segmentReducer(initial, { type: "clear" });
-    expect(cleared.segments).toEqual([]);
+    const cleared = segmentReducer(initial, { type: "clear", length: 10 });
+    expect(cleared.segments).toEqual([
+      { id: "segment-1", start_frame: 0, end_frame: 10, text: "", source: "user" },
+    ]);
     const undone = segmentReducer(cleared, { type: "undo" });
     expect(undone.segments).toEqual(segments);
     const redone = segmentReducer(undone, { type: "redo" });
-    expect(redone.segments).toEqual([]);
+    expect(redone.segments).toEqual(cleared.segments);
   });
 });

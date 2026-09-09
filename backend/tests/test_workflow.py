@@ -7,6 +7,7 @@ from app.features.task_packages.service import claim
 from app.features.users.service import delete_user
 from app.features.work_items.service import (
     clear_annotations,
+    initial_segments,
     review_item,
     save_draft,
     submit_annotation,
@@ -162,7 +163,7 @@ def test_delete_user_preserves_record_but_hides_account(db, monkeypatch):
     assert deleted.is_active is False
 
 
-def test_clear_annotations_persists_empty_segments(db, tmp_path, monkeypatch):
+def test_clear_annotations_persists_one_blank_full_episode_segment(db, tmp_path, monkeypatch):
     _, annotator, _, package, original = setup_item(db, tmp_path, monkeypatch)
     item = claim(package.id, annotator, False, db)
     clear_annotations(item.id, annotator, db)
@@ -170,15 +171,57 @@ def test_clear_annotations_persists_empty_segments(db, tmp_path, monkeypatch):
     revision = db.scalar(
         select(AnnotationRevision).where(AnnotationRevision.task_item_id == original.id)
     )
-    assert revision.payload == {"schema_version": "segments.v1", "segments": []}
+    assert revision.payload == {
+        "schema_version": "segments.v1",
+        "segments": [
+            {
+                "id": "segment-1",
+                "start_frame": 0,
+                "end_frame": 10,
+                "text": "",
+                "source": "user",
+            }
+        ],
+    }
     with pytest.raises(HTTPException) as conflict:
         submit_annotation(
             item.id,
-            RevisionInput(payload={"schema_version": "segments.v1", "segments": []}),
+            RevisionInput(
+                payload={
+                    "schema_version": "segments.v1",
+                    "segments": [
+                        {
+                            "id": "segment-1",
+                            "start_frame": 0,
+                            "end_frame": 10,
+                            "text": "",
+                            "source": "user",
+                        }
+                    ],
+                }
+            ),
             annotator,
             db,
         )
     assert conflict.value.status_code == 422
+
+
+def test_initial_segments_uses_one_blank_segment_without_subtasks(db, tmp_path, monkeypatch):
+    _, _, _, package, original = setup_item(db, tmp_path, monkeypatch)
+    episode = db.get(DatasetEpisode, original.episode_id)
+
+    assert initial_segments(episode, fps=30) == {
+        "schema_version": "segments.v1",
+        "segments": [
+            {
+                "id": "segment-1",
+                "start_frame": 0,
+                "end_frame": 10,
+                "text": "",
+                "source": "user",
+            }
+        ],
+    }
 
 
 def test_draft_operations_use_annotation_state_machine(db, tmp_path, monkeypatch):

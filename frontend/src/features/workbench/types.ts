@@ -14,6 +14,6 @@ export type WorkbenchAction =
   | { type: "update-text"; id: string; text: string }
   | { type: "split"; id: string; frame: number; newId: string }
   | { type: "move-boundary"; index: number; frame: number; length: number }
-  | { type: "clear" }
+  | { type: "clear"; length: number }
   | { type: "undo" }
   | { type: "redo" };

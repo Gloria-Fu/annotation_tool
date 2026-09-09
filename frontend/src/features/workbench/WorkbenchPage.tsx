@@ -13,12 +13,14 @@ import { Timeline } from "./components/Timeline";
 import { WorkbenchToolbar } from "./components/WorkbenchToolbar";
 import { useAutosave } from "./hooks/useAutosave";
 import { useVideoSync } from "./hooks/useVideoSync";
-import { createWorkbenchState, segmentReducer } from "./model/segmentReducer";
+import { createBlankSegment, createWorkbenchState, segmentReducer } from "./model/segmentReducer";
 import { formatFrameTime } from "./model/timelineMath";
 
 function initialSegments(context: WorkContext): Segment[] {
   const segments = context.latest_revision?.payload.segments;
-  return Array.isArray(segments) ? segments : [];
+  return Array.isArray(segments) && segments.length > 0
+    ? segments
+    : [createBlankSegment(context.length)];
 }
 
 export function WorkbenchPage() {
@@ -139,8 +141,8 @@ export function WorkbenchPage() {
   }, [selected, videoSync.currentFrame]);
   const clear = useCallback(() => setClearOpen(true), []);
   const confirmClear = () => {
-    dispatch({ type: "clear" });
-    setSelectedId(undefined);
+    dispatch({ type: "clear", length });
+    setSelectedId("segment-1");
     setDirty(false);
     void clearServer.mutateAsync();
   };
@@ -253,7 +255,7 @@ export function WorkbenchPage() {
         }}
         onOk={confirmClear}
       >
-        <p>当前任务中的标注会重置为空，原始数据文件不会改变。</p>
+        <p>当前任务中的标注文字会清空并合并为一个完整片段，原始数据文件不会改变。</p>
       </Modal>
       <span className="sr-only">{formatFrameTime(videoSync.currentFrame, fps)}</span>
     </>

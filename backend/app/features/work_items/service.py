@@ -69,6 +69,16 @@ def latest_revision(db: Session, item_id: str) -> AnnotationRevision | None:
     )
 
 
+def blank_segment(length: int) -> dict[str, Any]:
+    return {
+        "id": "segment-1",
+        "start_frame": 0,
+        "end_frame": length,
+        "text": "",
+        "source": "user",
+    }
+
+
 def initial_segments(episode: DatasetEpisode, fps: float) -> dict[str, Any]:
     annotations = (episode.episode_metadata or {}).get("language_annotations", [])
     subtasks = [
@@ -104,6 +114,8 @@ def initial_segments(episode: DatasetEpisode, fps: float) -> dict[str, Any]:
                 "skill": skill,
             }
         )
+    if not segments:
+        segments = [blank_segment(episode.length)]
     return {"schema_version": "segments.v1", "segments": segments}
 
 
@@ -321,7 +333,7 @@ def clear_annotations(item_id: str, user: User, db: Session) -> TaskItem:
     _ensure_can_edit(item, user, "清空")
     previous = latest_revision(db, item.id)
     version = previous.version + 1 if previous else 1
-    payload = {"schema_version": "segments.v1", "segments": []}
+    payload = {"schema_version": "segments.v1", "segments": [blank_segment(episode.length)]}
     prepared = annotation_storage.prepare_revision(
         resolve_dataset_root(dataset.root_path),
         item.id,
