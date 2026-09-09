@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
 import { Boxes, Play, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { Dataset, TaskPackage, User } from "../../shared/api/types";
 import { roleLabels, statusLabels } from "../../shared/constants/labels";
@@ -115,7 +115,11 @@ export function PackagesPage() {
                     </Button>
                   )}
                   {isManager && (
-                    <Button size="small" icon={<Boxes size={14} />} onClick={() => void navigate(`/packages/${row.id}`)}>
+                    <Button
+                      size="small"
+                      icon={<Boxes size={14} />}
+                      onClick={() => void navigate(`/packages/${row.id}`)}
+                    >
                       管理条目
                     </Button>
                   )}

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Table } from "antd";
 import { Download } from "lucide-react";
 import { dashboardApi } from "./api";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { queryKeys } from "../../shared/queryKeys";
 
@@ -47,9 +47,7 @@ export function DashboardPage() {
         </div>
         <div className="metric">
           <div className="metric-label">完成率</div>
-          <div className="metric-value">
-            {Math.round((data?.completion_rate || 0) * 100)}%
-          </div>
+          <div className="metric-value">{Math.round((data?.completion_rate || 0) * 100)}%</div>
         </div>
       </div>
       <div className="table-panel">

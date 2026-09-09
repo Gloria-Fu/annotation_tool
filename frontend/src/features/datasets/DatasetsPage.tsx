@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Form, Input, Modal, Space, Table, Tag, message } from "antd";
 import { Plus, RefreshCw } from "lucide-react";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { Dataset } from "../../shared/api/types";
 import { queryKeys } from "../../shared/queryKeys";

@@ -51,12 +51,7 @@ export function ProjectsPage() {
           ]}
         />
       </div>
-      <Modal
-        open={open}
-        title="新建项目"
-        footer={null}
-        onCancel={() => setOpen(false)}
-      >
+      <Modal open={open} title="新建项目" footer={null} onCancel={() => setOpen(false)}>
         <Form<ProjectInput>
           form={form}
           layout="vertical"

@@ -82,7 +82,9 @@ export function Timeline({
               onSeek(segment.start_frame);
             }}
           >
-            <span>{index + 1}. {segment.text || "未填写"}</span>
+            <span>
+              {index + 1}. {segment.text || "未填写"}
+            </span>
             {index > 0 && (
               <i
                 className="timeline-divider"

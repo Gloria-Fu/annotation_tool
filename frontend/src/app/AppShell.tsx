@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Layout, Menu, Select, Typography } from "antd";
 import {
@@ -21,24 +21,10 @@ import { PasswordGate } from "../features/auth/components/PasswordGate";
 import { projectsApi } from "../features/projects/api";
 import { roleLabels } from "../shared/constants/labels";
 import { queryKeys } from "../shared/queryKeys";
-import type { Project, Role, User } from "../shared/api/types";
+import { ShellContext } from "./shellContext";
+import type { Role, User } from "../shared/api/types";
 
 const { Header, Content, Sider } = Layout;
-
-export type ShellContextValue = {
-  user: User;
-  projects: Project[];
-  projectId?: string;
-  setProjectId: (id: string) => void;
-};
-
-const ShellContext = createContext<ShellContextValue>({
-  user: {} as User,
-  projects: [],
-  setProjectId: () => undefined,
-});
-
-export const useShell = () => useContext(ShellContext);
 
 const menuByRole: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
   developer_admin: [
@@ -130,7 +116,12 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
                 <strong>{user.display_name}</strong>{" "}
                 <Typography.Text type="secondary">{roleLabels[user.role]}</Typography.Text>
               </div>
-              <Button type="text" icon={<LogOut size={17} />} onClick={() => void logout()} title="退出" />
+              <Button
+                type="text"
+                icon={<LogOut size={17} />}
+                onClick={() => void logout()}
+                title="退出"
+              />
             </div>
           </Header>
           <Content className="content">{children}</Content>

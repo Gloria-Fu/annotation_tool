@@ -34,8 +34,10 @@ export function SegmentEditor({
       {selected ? (
         <>
           <div className="segment-meta">
-            {formatFrameTime(selected.start_frame, fps)} - {formatFrameTime(selected.end_frame, fps)}
-            {" · "}时长 {durationSeconds(selected.start_frame, selected.end_frame, fps).toFixed(2)} 秒
+            {formatFrameTime(selected.start_frame, fps)} -{" "}
+            {formatFrameTime(selected.end_frame, fps)}
+            {" · "}时长 {durationSeconds(selected.start_frame, selected.end_frame, fps).toFixed(2)}{" "}
+            秒
           </div>
           <Input.TextArea
             value={selected.text}
@@ -56,16 +58,17 @@ export function SegmentEditor({
                 <Button danger onClick={() => onReview("request_changes")}>
                   退回修改
                 </Button>
-                <Button
-                  type="primary"
-                  disabled={!canSubmit}
-                  onClick={() => onReview("approve")}
-                >
+                <Button type="primary" disabled={!canSubmit} onClick={() => onReview("approve")}>
                   审核通过
                 </Button>
               </>
             ) : (
-              <Button type="primary" disabled={!canSubmit} loading={isSubmitting} onClick={onSubmit}>
+              <Button
+                type="primary"
+                disabled={!canSubmit}
+                loading={isSubmitting}
+                onClick={onSubmit}
+              >
                 提交审核
               </Button>
             )}

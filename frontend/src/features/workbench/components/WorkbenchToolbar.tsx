@@ -1,13 +1,5 @@
 import { Button, Select, Typography } from "antd";
-import {
-  Eraser,
-  RotateCcw,
-  Scissors,
-  Undo2,
-  Redo2,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { Eraser, RotateCcw, Scissors, Undo2, Redo2, ZoomIn, ZoomOut } from "lucide-react";
 import { formatFrameTime } from "../model/timelineMath";
 
 export function WorkbenchToolbar({
@@ -57,7 +49,11 @@ export function WorkbenchToolbar({
         onClick={() => onZoomChange(Math.min(3, zoom + 0.25))}
         title="放大时间轴"
       />
-      <Button icon={<RotateCcw size={15} />} onClick={() => onZoomChange(1)} title="重置时间轴缩放" />
+      <Button
+        icon={<RotateCcw size={15} />}
+        onClick={() => onZoomChange(1)}
+        title="重置时间轴缩放"
+      />
       <Select
         value={rate}
         onChange={onRateChange}

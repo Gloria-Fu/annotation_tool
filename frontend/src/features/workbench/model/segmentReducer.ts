@@ -41,11 +41,7 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
       );
     case "split": {
       const selected = state.segments.find((segment) => segment.id === action.id);
-      if (
-        !selected ||
-        action.frame <= selected.start_frame ||
-        action.frame >= selected.end_frame
-      ) {
+      if (!selected || action.frame <= selected.start_frame || action.frame >= selected.end_frame) {
         return state;
       }
       const next = state.segments.flatMap((segment) =>

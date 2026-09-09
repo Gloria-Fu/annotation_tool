@@ -24,10 +24,7 @@ export function MultiViewPlayer({
   return (
     <div className="video-grid">
       {orderedKeys.map((key, index) => (
-        <div
-          key={key}
-          className={index === 0 ? "video-card video-head" : "video-card video-side"}
-        >
+        <div key={key} className={index === 0 ? "video-card video-head" : "video-card video-side"}>
           <div className="video-label">
             {key.includes("head")
               ? "HEAD 主视角"
@@ -47,7 +44,8 @@ export function MultiViewPlayer({
             }
             onTimeUpdate={
               index === 0
-                ? (event) => onFrameChange(Math.round(event.currentTarget.currentTime * context.fps))
+                ? (event) =>
+                    onFrameChange(Math.round(event.currentTarget.currentTime * context.fps))
                 : undefined
             }
             controls={index === 0}

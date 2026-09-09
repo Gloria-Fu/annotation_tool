@@ -1,5 +1,10 @@
 import { api } from "../../shared/api/client";
-import type { AnnotationPayload, RevisionSnapshot, TaskItem, WorkContext } from "../../shared/api/types";
+import type {
+  AnnotationPayload,
+  RevisionSnapshot,
+  TaskItem,
+  WorkContext,
+} from "../../shared/api/types";
 
 export type RevisionInput = {
   schema_version: "segments.v1";
@@ -19,17 +24,23 @@ export const workbenchApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  clear: (itemId: string) =>
-    api<TaskItem>(`/work-items/${itemId}/clear`, { method: "POST" }),
+  clear: (itemId: string) => api<TaskItem>(`/work-items/${itemId}/clear`, { method: "POST" }),
   review: (
     itemId: string,
-    input: { decision: "approve" | "request_changes"; comment?: string; payload?: AnnotationPayload },
+    input: {
+      decision: "approve" | "request_changes";
+      comment?: string;
+      payload?: AnnotationPayload;
+    },
   ) =>
     api<TaskItem>(`/work-items/${itemId}/review`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  revisionInput: (segments: import("../../shared/api/types").Segment[], revision?: RevisionSnapshot | null) => ({
+  revisionInput: (
+    segments: import("../../shared/api/types").Segment[],
+    revision?: RevisionSnapshot | null,
+  ) => ({
     schema_version: "segments.v1" as const,
     payload: { schema_version: "segments.v1", segments },
     base_revision_id: revision?.id ?? null,

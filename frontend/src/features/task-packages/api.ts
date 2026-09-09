@@ -18,13 +18,14 @@ export const taskPackagesApi = {
   publish: (packageId: string) =>
     api<TaskPackage>(`/task-packages/${packageId}/publish`, { method: "POST" }),
   items: (packageId: string, status?: string) =>
-    api<TaskItem[]>(
-      `/task-packages/${packageId}/items${status ? `?status=${status}` : ""}`,
-    ),
+    api<TaskItem[]>(`/task-packages/${packageId}/items${status ? `?status=${status}` : ""}`),
   claim: (packageId: string, review: boolean) =>
-    api<TaskItem>(`/${review ? "review-tasks" : "annotation-tasks"}/claim?package_id=${packageId}`, {
-      method: "POST",
-    }),
+    api<TaskItem>(
+      `/${review ? "review-tasks" : "annotation-tasks"}/claim?package_id=${packageId}`,
+      {
+        method: "POST",
+      },
+    ),
   assign: (
     packageId: string,
     input: { item_ids: string[]; assignee_id: string; stage: "annotation" | "review" },
@@ -42,7 +43,9 @@ export const taskPackagesApi = {
     api<TaskItem[]>(`/my-tasks?stage=${review ? "review" : "annotation"}`),
   usersForStage: (users: User[], stage: "annotation" | "review") => {
     const roles: Role[] =
-      stage === "annotation" ? ["annotator", "annotation_manager"] : ["reviewer", "annotation_manager"];
+      stage === "annotation"
+        ? ["annotator", "annotation_manager"]
+        : ["reviewer", "annotation_manager"];
     return users.filter((user) => roles.includes(user.role));
   },
 };

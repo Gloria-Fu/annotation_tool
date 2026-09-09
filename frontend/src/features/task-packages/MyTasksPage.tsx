@@ -31,7 +31,11 @@ export function MyTasksPage({ review = false }: { review?: boolean }) {
             {
               title: "操作",
               render: (_, row) => (
-                <Button type="primary" size="small" onClick={() => void navigate(`/work/${row.id}`)}>
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => void navigate(`/work/${row.id}`)}
+                >
                   打开工作台
                 </Button>
               ),

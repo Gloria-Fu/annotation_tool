@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal, Typography, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import type { Segment, WorkContext } from "../../shared/api/types";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
@@ -66,7 +66,8 @@ export function WorkbenchPage() {
   });
 
   const saveDraft = useMutation({
-    mutationFn: () => workbenchApi.saveDraft(itemId, workbenchApi.revisionInput(state.segments, revision)),
+    mutationFn: () =>
+      workbenchApi.saveDraft(itemId, workbenchApi.revisionInput(state.segments, revision)),
     onSuccess: () => {
       setDirty(false);
       setRevision(null);
@@ -87,7 +88,8 @@ export function WorkbenchPage() {
     onError: (error: Error) => message.error(error.message),
   });
   const submit = useMutation({
-    mutationFn: () => workbenchApi.submit(itemId, workbenchApi.revisionInput(state.segments, revision)),
+    mutationFn: () =>
+      workbenchApi.submit(itemId, workbenchApi.revisionInput(state.segments, revision)),
     onSuccess: () => {
       message.success("已提交审核");
       void queryClient.invalidateQueries({ queryKey: queryKeys.myTasks(false) });
@@ -110,11 +112,14 @@ export function WorkbenchPage() {
     onError: (error: Error) => message.error(error.message),
   });
 
-  const onTextChange = useCallback((text: string) => {
-    if (!selected) return;
-    dispatch({ type: "update-text", id: selected.id, text });
-    setDirty(true);
-  }, [selected]);
+  const onTextChange = useCallback(
+    (text: string) => {
+      if (!selected) return;
+      dispatch({ type: "update-text", id: selected.id, text });
+      setDirty(true);
+    },
+    [selected],
+  );
   const split = useCallback(() => {
     if (!selected) {
       message.info("请先选择一个标注段");
@@ -122,7 +127,10 @@ export function WorkbenchPage() {
     }
     const newId = `${selected.id}-split-${Date.now()}`;
     dispatch({ type: "split", id: selected.id, frame: videoSync.currentFrame, newId });
-    if (videoSync.currentFrame > selected.start_frame && videoSync.currentFrame < selected.end_frame) {
+    if (
+      videoSync.currentFrame > selected.start_frame &&
+      videoSync.currentFrame < selected.end_frame
+    ) {
       setSelectedId(newId);
       setDirty(true);
     } else {
@@ -168,7 +176,9 @@ export function WorkbenchPage() {
         title={`Episode ${context.episode_index}`}
         subtitle={`${context.length} 帧 · ${(context.length / fps).toFixed(2)} 秒 · ${context.tasks.join(" / ")}`}
         action={
-          <Typography.Text type={autosave.saveState.startsWith("保存失败") ? "danger" : "secondary"}>
+          <Typography.Text
+            type={autosave.saveState.startsWith("保存失败") ? "danger" : "secondary"}
+          >
             {autosave.saveState}
           </Typography.Text>
         }

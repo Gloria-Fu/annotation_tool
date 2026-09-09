@@ -3,7 +3,7 @@ import type { Key } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Select, Table, Tag, message } from "antd";
 import { useParams } from "react-router-dom";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { TaskItem } from "../../shared/api/types";
 import { statusLabels } from "../../shared/constants/labels";

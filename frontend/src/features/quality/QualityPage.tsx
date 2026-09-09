@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Select, Space, Table, message } from "antd";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { TaskItem, TaskPackage } from "../../shared/api/types";
 import { queryKeys } from "../../shared/queryKeys";
@@ -61,7 +61,10 @@ export function QualityPage() {
               title: "操作",
               render: (_, row) => (
                 <Space>
-                  <Button size="small" onClick={() => check.mutate({ id: row.id, result: "passed" })}>
+                  <Button
+                    size="small"
+                    onClick={() => check.mutate({ id: row.id, result: "passed" })}
+                  >
                     通过
                   </Button>
                   <Button

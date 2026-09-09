@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Form, Input, Modal, Select, Space, Table, Tag, message } from "antd";
 import { Plus } from "lucide-react";
-import { useShell } from "../../app/AppShell";
+import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { Role, User } from "../../shared/api/types";
 import { roleLabels } from "../../shared/constants/labels";
@@ -20,7 +20,10 @@ export function UsersPage() {
   const { data = [] } = useQuery({ queryKey: queryKeys.users, queryFn: usersApi.list });
   const create = useMutation({
     mutationFn: (input: UserFormInput) =>
-      usersApi.create({ ...input, project_ids: input.project_ids || (projectId ? [projectId] : []) }),
+      usersApi.create({
+        ...input,
+        project_ids: input.project_ids || (projectId ? [projectId] : []),
+      }),
     onSuccess: () => {
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
