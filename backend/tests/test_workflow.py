@@ -194,4 +194,6 @@ def test_draft_operations_use_annotation_state_machine(db, tmp_path, monkeypatch
     assert item.status == ItemStatus.ANNOTATING
     item = save_draft(item.id, payload, annotator, db)
     assert item.status == ItemStatus.ANNOTATING
-    assert db.scalar(select(AnnotationRevision).where(AnnotationRevision.task_item_id == original.id))
+    assert db.scalar(
+        select(AnnotationRevision).where(AnnotationRevision.task_item_id == original.id)
+    )
