@@ -20,7 +20,7 @@ export function QualityPage() {
     enabled: !!projectId,
   });
   const { data: items = [] } = useQuery({
-    queryKey: packageId ? queryKeys.qualityItems(packageId) : ["quality-items", "empty"],
+    queryKey: packageId ? queryKeys.qualityItems(packageId) : queryKeys.qualityItemsEmpty,
     queryFn: () => qualityApi.completedItems(packageId as string),
     enabled: !!packageId,
   });
@@ -29,7 +29,7 @@ export function QualityPage() {
       qualityApi.check(id, result),
     onSuccess: () => {
       message.success("抽检结果已记录");
-      void queryClient.invalidateQueries({ queryKey: ["quality-items"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.qualityItemsRoot });
     },
     onError: (error: ApiError) => message.error(error.message),
   });

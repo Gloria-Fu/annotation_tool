@@ -1,5 +1,5 @@
 import { api } from "../../shared/api/client";
-import type { Role, TaskItem, TaskPackage, User } from "../../shared/api/types";
+import type { ItemStatus, Role, TaskItem, TaskPackage, User } from "../../shared/api/types";
 
 export type PackageInput = {
   project_id: string;
@@ -17,7 +17,7 @@ export const taskPackagesApi = {
     api<TaskPackage>("/task-packages", { method: "POST", body: JSON.stringify(input) }),
   publish: (packageId: string) =>
     api<TaskPackage>(`/task-packages/${packageId}/publish`, { method: "POST" }),
-  items: (packageId: string, status?: string) =>
+  items: (packageId: string, status?: ItemStatus) =>
     api<TaskItem[]>(`/task-packages/${packageId}/items${status ? `?status=${status}` : ""}`),
   claim: (packageId: string, review: boolean) =>
     api<TaskItem>(

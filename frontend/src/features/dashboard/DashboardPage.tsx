@@ -9,7 +9,7 @@ import { queryKeys } from "../../shared/queryKeys";
 export function DashboardPage() {
   const { projectId } = useShell();
   const { data, isLoading } = useQuery({
-    queryKey: projectId ? queryKeys.stats(projectId) : ["stats", "empty"],
+    queryKey: projectId ? queryKeys.stats(projectId) : queryKeys.statsEmpty,
     queryFn: () => dashboardApi.stats(projectId as string),
     enabled: !!projectId,
   });

@@ -26,7 +26,7 @@ export function DatasetsPage() {
     onSuccess: () => {
       message.success("导入任务已创建");
       setOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.datasetsRoot });
     },
     onError: (error: ApiError) => message.error(error.message),
   });
