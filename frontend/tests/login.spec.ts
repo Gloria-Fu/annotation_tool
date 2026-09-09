@@ -9,6 +9,20 @@ test("login page is usable", async ({ page }) => {
 });
 
 test("invalid login reports a clear error", async ({ page }) => {
+  await page.route("**/api/v1/auth/me", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "未登录或会话已失效" }),
+    }),
+  );
+  await page.route("**/api/v1/auth/login", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "用户名或密码错误" }),
+    }),
+  );
   await page.goto("/");
   await page.getByLabel("用户名").fill("unknown-user");
   await page.getByLabel("密码").fill("not-the-password");
