@@ -28,6 +28,7 @@ test:
 generate-api:
 	cd $(BACKEND_DIR) && python scripts/export_openapi.py ../frontend/src/shared/api/openapi.json
 	cd $(FRONTEND_DIR) && npm run generate:api
+	git diff --exit-code -- frontend/src/shared/api/openapi.json frontend/src/shared/api/generated.ts
 
 build:
 	cd $(FRONTEND_DIR) && npm run build
