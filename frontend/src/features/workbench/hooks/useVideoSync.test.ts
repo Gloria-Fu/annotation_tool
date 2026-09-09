@@ -39,4 +39,26 @@ describe("useVideoSync", () => {
 
     expect(result.current.currentFrame).toBe(20);
   });
+
+  it("plays a selected segment and pauses at its end", () => {
+    const { result } = renderHook(() => useVideoSync(20, 10));
+    const video = document.createElement("video");
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    video.play = play;
+    video.pause = pause;
+
+    act(() => result.current.registerVideo("cam.head", video));
+    act(() => result.current.playSegment(5, 12));
+
+    expect(video.currentTime).toBeCloseTo(0.5);
+    expect(play).toHaveBeenCalledOnce();
+    expect(result.current.currentFrame).toBe(5);
+    expect(result.current.playing).toBe(true);
+
+    act(() => result.current.syncFrame(12));
+
+    expect(pause).toHaveBeenCalledOnce();
+    expect(result.current.playing).toBe(false);
+  });
 });

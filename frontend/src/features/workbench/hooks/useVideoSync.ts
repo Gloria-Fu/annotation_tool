@@ -5,6 +5,7 @@ type VideoMap = Record<string, HTMLVideoElement | null>;
 
 export function useVideoSync(length: number, fps: number) {
   const videos = useRef<VideoMap>({});
+  const playbackRange = useRef<{ endFrame: number } | null>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
@@ -23,6 +24,11 @@ export function useVideoSync(length: number, fps: number) {
     (frame: number) => {
       const bounded = clampFrame(frame, length);
       setCurrentFrame(bounded);
+      if (playbackRange.current && bounded >= playbackRange.current.endFrame) {
+        playbackRange.current = null;
+        Object.values(videos.current).forEach((video) => video?.pause());
+        setPlaying(false);
+      }
       Object.values(videos.current).forEach((video) => {
         if (video && Math.abs(video.currentTime - bounded / fps) > 0.08) {
           video.currentTime = bounded / fps;
@@ -39,6 +45,23 @@ export function useVideoSync(length: number, fps: number) {
     Object.values(videos.current).forEach((video) => video?.pause());
     setPlaying(false);
   }, []);
+  const playSegment = useCallback(
+    (startFrame: number, endFrame: number) => {
+      const start = clampFrame(startFrame, length);
+      const end = clampFrame(endFrame, length);
+      if (end <= start) return;
+      playbackRange.current = { endFrame: end };
+      const position = start / fps;
+      Object.values(videos.current).forEach((video) => {
+        if (!video) return;
+        video.currentTime = position;
+        void video.play();
+      });
+      setCurrentFrame(start);
+      setPlaying(true);
+    },
+    [fps, length],
+  );
   const changeRate = useCallback((nextRate: number) => {
     setRate(nextRate);
     Object.values(videos.current).forEach((video) => {
@@ -54,6 +77,7 @@ export function useVideoSync(length: number, fps: number) {
     registerVideo,
     syncFrame,
     playAll,
+    playSegment,
     pauseAll,
     changeRate,
   };

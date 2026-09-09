@@ -127,12 +127,17 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await expect(page.locator(".timeline-segment")).toHaveCount(2);
   await expect(page.getByText("未填写")).toBeVisible();
 
-  await page.getByTitle("撤销").click();
-  await expect(page.locator(".timeline-segment")).toHaveCount(1);
-  await page.getByTitle("重做").click();
-  await expect(page.locator(".timeline-segment")).toHaveCount(2);
+  await page.locator(".timeline-segment").first().click();
+  await track.click({ position: { x: 250, y: 95 } });
+  await page.keyboard.press("Space");
+  await expect(page.locator(".timeline-segment")).toHaveCount(3);
 
-  const divider = page.getByLabel("拖动调整片段分界");
+  await page.getByTitle("撤销").click();
+  await expect(page.locator(".timeline-segment")).toHaveCount(2);
+  await page.getByTitle("重做").click();
+  await expect(page.locator(".timeline-segment")).toHaveCount(3);
+
+  const divider = page.getByLabel("拖动调整片段分界").first();
   const dividerBox = await divider.boundingBox();
   expect(dividerBox).not.toBeNull();
   if (dividerBox) {

@@ -79,7 +79,6 @@ export function Timeline({
             onClick={(event) => {
               event.stopPropagation();
               onSelect(segment);
-              onSeek(segment.start_frame);
             }}
           >
             <span>

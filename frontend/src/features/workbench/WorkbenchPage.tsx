@@ -155,6 +155,13 @@ export function WorkbenchPage() {
   );
   const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), []);
   const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), []);
+  const onSelectSegment = useCallback(
+    (segment: Segment) => {
+      setSelectedId(segment.id);
+      videoSync.playSegment(segment.start_frame, segment.end_frame);
+    },
+    [videoSync],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -223,7 +230,7 @@ export function WorkbenchPage() {
             length={context.length}
             fps={fps}
             zoom={zoom}
-            onSelect={(segment) => setSelectedId(segment.id)}
+            onSelect={onSelectSegment}
             onSeek={videoSync.syncFrame}
             onMoveBoundary={onMoveBoundary}
             onBoundaryDragStart={onBoundaryDragStart}
