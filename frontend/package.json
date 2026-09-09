@@ -10,7 +10,7 @@
     "test:e2e": "playwright test",
     "test:unit": "vitest",
     "typecheck": "tsc -b",
-    "lint": "eslint .",
+    "lint": "eslint src tests",
     "format": "prettier --write src tests *.ts *.js",
     "format:check": "prettier --check src tests *.ts *.js",
     "generate:api": "openapi-typescript src/shared/api/openapi.json -o src/shared/api/generated.ts"
