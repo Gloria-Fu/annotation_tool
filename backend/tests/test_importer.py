@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from app.models import Dataset, DatasetStatus, ImportJob, Project, Role, User
 from app.services import importer
 
@@ -20,19 +21,35 @@ def test_imports_lerobot_v21_and_warns_on_aggregate_mismatch(tmp_path, db, monke
         "features": {"cam.head": {"dtype": "video"}},
     }
     (root / "meta/info.json").write_text(json.dumps(info), encoding="utf-8")
-    (root / "meta/episodes.jsonl").write_text(json.dumps({"episode_index": 0, "length": 12, "tasks": ["pick"]}) + "\n", encoding="utf-8")
-    (root / "meta/tasks.jsonl").write_text(json.dumps({"task_index": 0, "task": "pick"}) + "\n", encoding="utf-8")
+    (root / "meta/episodes.jsonl").write_text(
+        json.dumps({"episode_index": 0, "length": 12, "tasks": ["pick"]}) + "\n", encoding="utf-8"
+    )
+    (root / "meta/tasks.jsonl").write_text(
+        json.dumps({"task_index": 0, "task": "pick"}) + "\n", encoding="utf-8"
+    )
     monkeypatch.setattr(importer.settings, "dataset_mount_root", tmp_path)
 
-    user = User(username="admin", display_name="Admin", password_hash="x", role=Role.DEVELOPER_ADMIN)
-    db.add(user); db.flush()
+    user = User(
+        username="admin", display_name="Admin", password_hash="x", role=Role.DEVELOPER_ADMIN
+    )
+    db.add(user)
+    db.flush()
     project = Project(name="P", created_by_id=user.id)
-    db.add(project); db.flush()
+    db.add(project)
+    db.flush()
     _, _, digest = importer.inspect_dataset(str(root))
-    dataset = Dataset(project_id=project.id, name="D", root_path=str(root), metadata_hash=digest, created_by_id=user.id)
-    db.add(dataset); db.flush()
+    dataset = Dataset(
+        project_id=project.id,
+        name="D",
+        root_path=str(root),
+        metadata_hash=digest,
+        created_by_id=user.id,
+    )
+    db.add(dataset)
+    db.flush()
     job = ImportJob(dataset_id=dataset.id)
-    db.add(job); db.commit()
+    db.add(job)
+    db.commit()
 
     importer.run_import(job.id)
     db.expire_all()
@@ -48,9 +65,5 @@ def test_rejects_path_outside_mount(tmp_path, monkeypatch):
     allowed = tmp_path / "allowed"
     allowed.mkdir()
     monkeypatch.setattr(importer.settings, "dataset_mount_root", allowed)
-    try:
+    with pytest.raises(importer.ImportValidationError):
         importer.resolve_dataset_root(str(tmp_path))
-        assert False, "expected validation error"
-    except importer.ImportValidationError:
-        pass
-

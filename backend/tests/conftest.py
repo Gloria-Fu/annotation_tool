@@ -4,7 +4,6 @@ os.environ.setdefault("DATABASE_URL", "sqlite:////tmp/annotate_tool_test.db")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
 import pytest
-
 from app.database import Base, SessionLocal, engine
 
 
@@ -20,4 +19,3 @@ def clean_database():
 def db():
     with SessionLocal() as session:
         yield session
-

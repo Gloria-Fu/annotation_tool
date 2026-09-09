@@ -1,0 +1,71 @@
+from fastapi import APIRouter
+
+from app.api.legacy_handlers import (
+    assign_items,
+    claim_annotation,
+    claim_review,
+    create_package,
+    list_items,
+    list_packages,
+    my_tasks,
+    publish_package,
+    reclaim_item,
+)
+from app.schemas import PackageOut, TaskItemOut
+
+router = APIRouter()
+router.add_api_route(
+    "/api/v1/task-packages",
+    list_packages,
+    methods=["GET"],
+    response_model=list[PackageOut],
+)
+router.add_api_route(
+    "/api/v1/task-packages",
+    create_package,
+    methods=["POST"],
+    response_model=PackageOut,
+    status_code=201,
+)
+router.add_api_route(
+    "/api/v1/task-packages/{package_id}/publish",
+    publish_package,
+    methods=["POST"],
+    response_model=PackageOut,
+)
+router.add_api_route(
+    "/api/v1/task-packages/{package_id}/items",
+    list_items,
+    methods=["GET"],
+    response_model=list[TaskItemOut],
+)
+router.add_api_route(
+    "/api/v1/annotation-tasks/claim",
+    claim_annotation,
+    methods=["POST"],
+    response_model=TaskItemOut,
+)
+router.add_api_route(
+    "/api/v1/review-tasks/claim",
+    claim_review,
+    methods=["POST"],
+    response_model=TaskItemOut,
+)
+router.add_api_route(
+    "/api/v1/my-tasks",
+    my_tasks,
+    methods=["GET"],
+    response_model=list[TaskItemOut],
+)
+router.add_api_route(
+    "/api/v1/task-packages/{package_id}/assign",
+    assign_items,
+    methods=["POST"],
+    response_model=list[TaskItemOut],
+)
+router.add_api_route(
+    "/api/v1/task-items/{item_id}/reclaim",
+    reclaim_item,
+    methods=["POST"],
+    response_model=TaskItemOut,
+)

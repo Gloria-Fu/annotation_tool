@@ -1,9 +1,8 @@
 import pytest
-from fastapi import HTTPException
-
-from app.main import _validate_segments
+from app.api.legacy_handlers import _validate_segments
 from app.schemas import RevisionInput
 from app.services.importer import ImportValidationError, _safe_relative, resolve_dataset_root
+from fastapi import HTTPException
 
 
 def test_submit_rejects_empty_segments():

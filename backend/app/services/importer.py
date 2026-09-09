@@ -3,11 +3,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete
-
 from app.config import settings
 from app.database import SessionLocal
 from app.models import Dataset, DatasetEpisode, DatasetStatus, ImportJob, utcnow
+from sqlalchemy import delete
 
 
 class ImportValidationError(ValueError):
@@ -64,6 +63,8 @@ def run_import(job_id: str) -> None:
         if not job:
             return
         dataset = db.get(Dataset, job.dataset_id)
+        if not dataset:
+            raise ImportValidationError("导入任务关联的数据集不存在")
         job.status = DatasetStatus.IMPORTING
         job.started_at = utcnow()
         dataset.status = DatasetStatus.IMPORTING
@@ -85,13 +86,17 @@ def run_import(job_id: str) -> None:
                             row = json.loads(line)
                             mappings[int(row["episode_index"])] = row
                         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-                            raise ImportValidationError(f"episode_source_mapping.jsonl 第 {line_no} 行错误") from exc
+                            raise ImportValidationError(
+                                f"episode_source_mapping.jsonl 第 {line_no} 行错误"
+                            ) from exc
 
             db.execute(delete(DatasetEpisode).where(DatasetEpisode.dataset_id == dataset.id))
             seen: set[int] = set()
             batch: list[DatasetEpisode] = []
             warnings: list[dict[str, Any]] = []
-            video_keys = [key for key, value in info["features"].items() if value.get("dtype") == "video"]
+            video_keys = [
+                key for key, value in info["features"].items() if value.get("dtype") == "video"
+            ]
             with episodes_path.open(encoding="utf-8") as handle:
                 for line_no, line in enumerate(handle, 1):
                     if not line.strip():
@@ -105,14 +110,20 @@ def run_import(job_id: str) -> None:
                         raise ImportValidationError(f"episode_index {episode_index} 重复")
                     seen.add(episode_index)
                     mapping = mappings.get(episode_index, {})
-                    data_rel = mapping.get("data_path") or _format_path(info["data_path"], episode_index)
+                    data_rel = mapping.get("data_path") or _format_path(
+                        info["data_path"], episode_index
+                    )
                     data_rel = _safe_relative(root, data_rel)
                     if not (root / data_rel).is_file():
-                        raise ImportValidationError(f"episode {episode_index} 缺少 Parquet: {data_rel}")
+                        raise ImportValidationError(
+                            f"episode {episode_index} 缺少 Parquet: {data_rel}"
+                        )
                     mapped_videos = mapping.get("video_paths", {})
                     video_paths: dict[str, str] = {}
                     for video_key in video_keys:
-                        rel = mapped_videos.get(video_key) or _format_path(info["video_path"], episode_index, video_key)
+                        rel = mapped_videos.get(video_key) or _format_path(
+                            info["video_path"], episode_index, video_key
+                        )
                         rel = _safe_relative(root, rel)
                         video_paths[video_key] = rel
                         if not (root / rel).is_file():
@@ -126,7 +137,9 @@ def run_import(job_id: str) -> None:
                             data_path=data_rel,
                             video_paths=video_paths,
                             source_episode=record.get("source_episode"),
-                            episode_metadata={"language_annotations": record.get("language_annotations", [])},
+                            episode_metadata={
+                                "language_annotations": record.get("language_annotations", [])
+                            },
                         )
                     )
                     if len(batch) >= 1000:
@@ -141,11 +154,23 @@ def run_import(job_id: str) -> None:
 
             declared_episodes = info.get("total_episodes")
             if declared_episodes is not None and declared_episodes != len(seen):
-                warnings.append({"code": "episode_count_mismatch", "declared": declared_episodes, "actual": len(seen)})
+                warnings.append(
+                    {
+                        "code": "episode_count_mismatch",
+                        "declared": declared_episodes,
+                        "actual": len(seen),
+                    }
+                )
             declared_videos = info.get("total_videos")
             actual_videos = len(seen) * len(video_keys)
             if declared_videos is not None and declared_videos != actual_videos:
-                warnings.append({"code": "video_count_mismatch", "declared": declared_videos, "actual": actual_videos})
+                warnings.append(
+                    {
+                        "code": "video_count_mismatch",
+                        "declared": declared_videos,
+                        "actual": actual_videos,
+                    }
+                )
             job.warnings = warnings
             job.warning_count = len(warnings)
             job.status = DatasetStatus.READY
@@ -159,7 +184,11 @@ def run_import(job_id: str) -> None:
         except Exception as exc:
             db.rollback()
             job = db.get(ImportJob, job_id)
+            if not job:
+                return
             dataset = db.get(Dataset, job.dataset_id)
+            if not dataset:
+                return
             message = str(exc)[:4000]
             job.status = DatasetStatus.FAILED
             job.error_message = message

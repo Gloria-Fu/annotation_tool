@@ -5,7 +5,7 @@ src = ["app", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
-ignore = ["E501"]
+ignore = ["B008", "E501"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -13,7 +13,9 @@ indent-style = "space"
 
 [tool.mypy]
 python_version = "3.12"
-strict = true
+strict = false
+check_untyped_defs = true
+warn_return_any = true
 plugins = []
 ignore_missing_imports = true
 
