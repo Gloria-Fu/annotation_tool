@@ -1,5 +1,4 @@
 import random
-from typing import Literal
 
 from fastapi import HTTPException
 from sqlalchemy import exists, func, or_, select

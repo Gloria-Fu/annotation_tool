@@ -1,8 +1,16 @@
+from hashlib import sha256
+from pathlib import Path
+
 import pytest
 from app.features.quality.service import check as quality_check
 from app.features.task_packages.service import claim
 from app.features.users.service import delete_user
-from app.features.work_items.service import clear_annotations, review_item, submit_annotation
+from app.features.work_items.service import (
+    clear_annotations,
+    review_item,
+    save_draft,
+    submit_annotation,
+)
 from app.models import (
     AnnotationRevision,
     ClaimPolicy,
@@ -86,6 +94,11 @@ def setup_item(db, tmp_path, monkeypatch):
 
 def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
     admin, annotator, reviewer, package, original = setup_item(db, tmp_path, monkeypatch)
+    dataset = db.get(Dataset, package.dataset_id)
+    source_path = Path(dataset.root_path) / "data.parquet"
+    source_path.write_bytes(b"immutable source data")
+    source_hash = sha256(source_path.read_bytes()).hexdigest()
+
     item = claim(package.id, annotator, False, db)
     assert item.id == original.id and item.status == ItemStatus.ANNOTATION_ASSIGNED
     with pytest.raises(HTTPException) as conflict:
@@ -113,6 +126,7 @@ def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
     assert item.status == ItemStatus.CHANGES_REQUESTED
     assert item.annotator_id == annotator.id
     assert item.reviewer_id is None
+    assert sha256(source_path.read_bytes()).hexdigest() == source_hash
 
 
 def test_manager_cannot_review_own_annotation(db, tmp_path, monkeypatch):
@@ -165,3 +179,19 @@ def test_clear_annotations_persists_empty_segments(db, tmp_path, monkeypatch):
             db,
         )
     assert conflict.value.status_code == 422
+
+
+def test_draft_operations_use_annotation_state_machine(db, tmp_path, monkeypatch):
+    _, annotator, _, package, original = setup_item(db, tmp_path, monkeypatch)
+    item = claim(package.id, annotator, False, db)
+    payload = RevisionInput(
+        payload={
+            "segments": [{"id": "segment-1", "start_frame": 0, "end_frame": 5, "text": "pick"}]
+        }
+    )
+
+    item = save_draft(item.id, payload, annotator, db)
+    assert item.status == ItemStatus.ANNOTATING
+    item = save_draft(item.id, payload, annotator, db)
+    assert item.status == ItemStatus.ANNOTATING
+    assert db.scalar(select(AnnotationRevision).where(AnnotationRevision.task_item_id == original.id))

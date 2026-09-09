@@ -196,6 +196,15 @@ def _ensure_can_edit(item: TaskItem, user: User, action: str) -> None:
         raise HTTPException(status_code=403, detail=f"不能{action}该标注任务")
 
 
+def _start_annotation(item: TaskItem, user: User) -> None:
+    if item.status == ItemStatus.ANNOTATING:
+        return
+    try:
+        state_machine.start_annotation(item, user.id)
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 def save_draft(item_id: str, payload: RevisionInput, user: User, db: Session) -> TaskItem:
     item, _, episode, dataset = item_access(db, item_id, user)
     _ensure_can_edit(item, user, "编辑")
@@ -223,7 +232,7 @@ def save_draft(item_id: str, payload: RevisionInput, user: User, db: Session) ->
         file_path=prepared.relative_path,
         file_hash=prepared.file_hash,
     )
-    item.status = ItemStatus.ANNOTATING
+    _start_annotation(item, user)
     audit(db, user.id, "save_draft", "task_item", item.id)
     commit_prepared_revision(db, annotation_storage, prepared, revision)
     return item
@@ -330,7 +339,7 @@ def clear_annotations(item_id: str, user: User, db: Session) -> TaskItem:
         file_path=prepared.relative_path,
         file_hash=prepared.file_hash,
     )
-    item.status = ItemStatus.ANNOTATING
+    _start_annotation(item, user)
     audit(db, user.id, "clear_annotations", "task_item", item.id)
     commit_prepared_revision(db, annotation_storage, prepared, revision)
     return item
