@@ -1,5 +1,5 @@
 import pytest
-from app.api.legacy_handlers import _validate_segments
+from app.features.work_items.service import validate_segments
 from app.schemas import RevisionInput
 from app.services.importer import ImportValidationError, _safe_relative, resolve_dataset_root
 from fastapi import HTTPException
@@ -7,13 +7,13 @@ from fastapi import HTTPException
 
 def test_submit_rejects_empty_segments():
     with pytest.raises(HTTPException) as error:
-        _validate_segments(RevisionInput(payload={"segments": []}), length=10, require_text=True)
+        validate_segments(RevisionInput(payload={"segments": []}), length=10, require_text=True)
     assert error.value.status_code == 422
 
 
 def test_submit_rejects_blank_text():
     with pytest.raises(HTTPException) as error:
-        _validate_segments(
+        validate_segments(
             RevisionInput(payload={"segments": [{"start_frame": 0, "end_frame": 2, "text": "  "}]}),
             length=10,
             require_text=True,
@@ -23,7 +23,7 @@ def test_submit_rejects_blank_text():
 
 def test_segment_ranges_must_not_overlap():
     with pytest.raises(HTTPException) as error:
-        _validate_segments(
+        validate_segments(
             RevisionInput(
                 payload={
                     "segments": [

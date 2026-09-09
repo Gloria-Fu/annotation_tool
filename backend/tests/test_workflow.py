@@ -1,13 +1,8 @@
 import pytest
-from app.api.legacy_handlers import (
-    claim_annotation,
-    claim_review,
-    clear_annotations,
-    delete_user,
-    quality_check,
-    review_item,
-    submit_annotation,
-)
+from app.features.quality.service import check as quality_check
+from app.features.task_packages.service import claim
+from app.features.users.service import delete_user
+from app.features.work_items.service import clear_annotations, review_item, submit_annotation
 from app.models import (
     AnnotationRevision,
     ClaimPolicy,
@@ -91,10 +86,10 @@ def setup_item(db, tmp_path, monkeypatch):
 
 def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
     admin, annotator, reviewer, package, original = setup_item(db, tmp_path, monkeypatch)
-    item = claim_annotation(package.id, annotator, db)
+    item = claim(package.id, annotator, False, db)
     assert item.id == original.id and item.status == ItemStatus.ANNOTATION_ASSIGNED
     with pytest.raises(HTTPException) as conflict:
-        claim_annotation(package.id, annotator, db)
+        claim(package.id, annotator, False, db)
     assert conflict.value.status_code == 409
 
     item = submit_annotation(
@@ -108,7 +103,7 @@ def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
         db,
     )
     assert item.status == ItemStatus.REVIEW_PENDING
-    item = claim_review(package.id, reviewer, db)
+    item = claim(package.id, reviewer, True, db)
     assert item.status == ItemStatus.REVIEW_ASSIGNED
     item = review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
     assert item.status == ItemStatus.COMPLETED
@@ -126,7 +121,7 @@ def test_manager_cannot_review_own_annotation(db, tmp_path, monkeypatch):
     project_id = db.get(TaskPackage, package.id).project_id
     db.add(ProjectMember(project_id=project_id, user_id=manager.id))
     db.commit()
-    item = claim_annotation(package.id, manager, db)
+    item = claim(package.id, manager, False, db)
     submit_annotation(
         item.id,
         RevisionInput(
@@ -138,12 +133,12 @@ def test_manager_cannot_review_own_annotation(db, tmp_path, monkeypatch):
         db,
     )
     with pytest.raises(HTTPException) as conflict:
-        claim_review(package.id, manager, db)
+        claim(package.id, manager, True, db)
     assert conflict.value.status_code == 409
 
 
 def test_delete_user_preserves_record_but_hides_account(db, monkeypatch):
-    monkeypatch.setattr("app.api.legacy_handlers.delete_user_sessions", lambda _user_id: None)
+    monkeypatch.setattr("app.features.users.service.delete_user_sessions", lambda _user_id: None)
     admin = make_user(db, "admin-delete", Role.DEVELOPER_ADMIN)
     target = make_user(db, "target-delete", Role.ANNOTATOR)
     delete_user(target.id, admin, db)
@@ -155,7 +150,7 @@ def test_delete_user_preserves_record_but_hides_account(db, monkeypatch):
 
 def test_clear_annotations_persists_empty_segments(db, tmp_path, monkeypatch):
     _, annotator, _, package, original = setup_item(db, tmp_path, monkeypatch)
-    item = claim_annotation(package.id, annotator, db)
+    item = claim(package.id, annotator, False, db)
     clear_annotations(item.id, annotator, db)
     db.expire_all()
     revision = db.scalar(
