@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-annotate_tool}
+      POSTGRES_USER: ${POSTGRES_USER:-annotate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-annotate}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-annotate}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    env_file: .env
+    command: sh -c "alembic upgrade head && python -m app.cli bootstrap-admin && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ${DATASET_HOST_PATH:-/tmp/annotate-datasets}:/datasets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    env_file: .env
+    command: celery -A app.worker.celery worker --loglevel=INFO --concurrency=2
+    volumes:
+      - ${DATASET_HOST_PATH:-/tmp/annotate-datasets}:/datasets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "18000:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
