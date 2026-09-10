@@ -16,6 +16,7 @@ export function WorkbenchToolbar({
   onRateChange,
   onUndo,
   onRedo,
+  onSeek,
 }: {
   currentFrame: number;
   length: number;
@@ -30,6 +31,7 @@ export function WorkbenchToolbar({
   onRateChange: (rate: number) => void;
   onUndo: () => void;
   onRedo: () => void;
+  onSeek: (frame: number) => void;
 }) {
   return (
     <div className="annotation-toolbar">
@@ -60,6 +62,28 @@ export function WorkbenchToolbar({
         options={[0.5, 1, 1.5, 2, 3].map((value) => ({ value, label: `${value}x` }))}
         style={{ width: 88 }}
       />
+      <div className="frame-nudge-controls" role="group" aria-label="微调视频时间轴">
+        <Button size="small" onClick={() => onSeek(currentFrame - 1)} title="后退 1 帧">
+          -1 帧
+        </Button>
+        <Button size="small" onClick={() => onSeek(currentFrame + 1)} title="前进 1 帧">
+          +1 帧
+        </Button>
+        <Button
+          size="small"
+          onClick={() => onSeek(currentFrame - Math.round(fps))}
+          title="后退 1 秒"
+        >
+          -1s
+        </Button>
+        <Button
+          size="small"
+          onClick={() => onSeek(currentFrame + Math.round(fps))}
+          title="前进 1 秒"
+        >
+          +1s
+        </Button>
+      </div>
       <Button icon={<Undo2 size={15} />} disabled={!canUndo} onClick={onUndo} title="撤销" />
       <Button icon={<Redo2 size={15} />} disabled={!canRedo} onClick={onRedo} title="重做" />
       <Typography.Text type="secondary">

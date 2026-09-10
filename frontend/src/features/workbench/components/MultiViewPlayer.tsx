@@ -1,7 +1,6 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import type { WorkContext } from "../../../shared/api/types";
-
-type KeyframePoint = { frame: number; view: string; x: number; y: number };
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { FineAnnotation, KeyframePoint, WorkContext } from "../../../shared/api/types";
+import { annotationHands, handLabel } from "../model/gripperKeyframes";
 
 function videoContentBox(video: HTMLVideoElement) {
   const width = video.clientWidth;
@@ -17,7 +16,7 @@ function videoContentBox(video: HTMLVideoElement) {
   };
 }
 
-function KeyframeMarker({ point }: { point: KeyframePoint }) {
+function KeyframeMarker({ point, label }: { point: KeyframePoint; label?: string }) {
   const markerRef = useRef<HTMLSpanElement>(null);
   const [position, setPosition] = useState({ left: 0, top: 0, visible: false });
   useLayoutEffect(() => {
@@ -54,8 +53,10 @@ function KeyframeMarker({ point }: { point: KeyframePoint }) {
         top: position.top,
         visibility: position.visible ? "visible" : "hidden",
       }}
-      title={`帧 ${point.frame}`}
-    />
+      title={`${label || "关键点"} · 帧 ${point.frame}`}
+    >
+      {label && <span className="video-keyframe-label">{label}</span>}
+    </span>
   );
 }
 
@@ -68,6 +69,8 @@ export function MultiViewPlayer({
   onFrameChange,
   pointMarking,
   keyframePoint,
+  gripperPoints,
+  currentFrame,
   onPointMarked,
 }: {
   context: WorkContext;
@@ -78,9 +81,22 @@ export function MultiViewPlayer({
   onFrameChange: (frame: number) => void;
   pointMarking: boolean;
   keyframePoint?: KeyframePoint;
+  gripperPoints?: FineAnnotation;
+  currentFrame: number;
   onPointMarked: (view: string, x: number, y: number) => void;
 }) {
   const videoKeys = Object.keys(context.video_urls);
+  // Stable refs keep unrelated form renders from resetting a pending native seek.
+  const videoRefs = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.keys(context.video_urls).map((key) => [
+          key,
+          (element: HTMLVideoElement | null) => registerVideo(key, element),
+        ]),
+      ),
+    [context.video_urls, registerVideo],
+  );
   const headKey = videoKeys.find((key) => key.includes("head")) || videoKeys[0];
   const orderedKeys = [headKey, ...videoKeys.filter((key) => key !== headKey)].filter(
     (key): key is string => !!key,
@@ -101,9 +117,9 @@ export function MultiViewPlayer({
                 : "RIGHT 右视角"}
           </div>
           <video
-            ref={(element) => registerVideo(key, element)}
+            ref={videoRefs[key]}
             src={context.video_urls[key]}
-            preload="metadata"
+            preload={index === 0 ? "auto" : "metadata"}
             muted={index > 0}
             onPlay={index === 0 ? playAll : undefined}
             onPause={index === 0 ? pauseAll : undefined}
@@ -134,7 +150,24 @@ export function MultiViewPlayer({
               }}
             />
           )}
-          {keyframePoint?.view === key && <KeyframeMarker point={keyframePoint} />}
+          {!gripperPoints &&
+            keyframePoint?.view === key &&
+            keyframePoint.frame === currentFrame && <KeyframeMarker point={keyframePoint} />}
+          {gripperPoints &&
+            annotationHands(gripperPoints).flatMap((hand) => {
+              const group = gripperPoints.gripper_keyframes?.[hand];
+              if (!group || group.view !== key || group.frame !== currentFrame) return [];
+              return (["left", "right"] as const).map((side) => {
+                const point = group[side];
+                return point?.visibility === "visible" ? (
+                  <KeyframeMarker
+                    key={hand + side}
+                    point={{ frame: group.frame, view: group.view, x: point.x, y: point.y }}
+                    label={handLabel(hand) + (side === "left" ? "左夹" : "右夹")}
+                  />
+                ) : null;
+              });
+            })}
         </div>
       ))}
     </div>

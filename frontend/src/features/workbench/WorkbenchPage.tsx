@@ -15,6 +15,9 @@ import { useAutosave } from "./hooks/useAutosave";
 import { useVideoSync } from "./hooks/useVideoSync";
 import { createBlankSegment, createWorkbenchState, segmentReducer } from "./model/segmentReducer";
 import { formatFrameTime } from "./model/timelineMath";
+import { templateIssues } from "./model/fineAnnotation";
+import { isSkillEnabled } from "./skillAvailability";
+import { GripperMarkModal, type GripperMarkSession } from "./components/GripperMarkModal";
 
 function initialSegments(context: WorkContext): Segment[] {
   const segments = context.latest_revision?.payload.segments;
@@ -39,6 +42,7 @@ export function WorkbenchPage() {
     ((point: NonNullable<FineAnnotation["keyframe_point"]>) => void) | undefined
   >(undefined);
   const [pointMarking, setPointMarking] = useState(false);
+  const [gripperSession, setGripperSession] = useState<GripperMarkSession>();
   const { data: context } = useQuery({
     queryKey: queryKeys.workContext(itemId),
     queryFn: () => workbenchApi.context(itemId),
@@ -63,7 +67,12 @@ export function WorkbenchPage() {
     itemId,
     segments: state.segments,
     dirty,
-    disabled: reviewing,
+    disabled:
+      reviewing ||
+      state.segments.some((segment) => {
+        const skill = segment.fine_annotation?.skill || segment.skill;
+        return !!skill && !isSkillEnabled(skill);
+      }),
     revision,
     onSaved: () => {
       setDirty(false);
@@ -121,6 +130,8 @@ export function WorkbenchPage() {
   const onFineChange = useCallback(
     (fine_annotation: FineAnnotation, text: string) => {
       if (!selected) return;
+      pointMarkedCallback.current = undefined;
+      setPointMarking(false);
       dispatch({ type: "update-fine", id: selected.id, fine_annotation, text });
       setDirty(true);
     },
@@ -167,6 +178,7 @@ export function WorkbenchPage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (gripperSession) return;
       const target = event.target as HTMLElement | null;
       if (event.code !== "Space" || target?.matches("input, textarea, [contenteditable='true']")) {
         return;
@@ -176,13 +188,14 @@ export function WorkbenchPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [split]);
+  }, [split, gripperSession]);
 
   if (!context) return null;
   const submitDisabled =
-    !state.segments.length || state.segments.some((segment) => !segment.text.trim());
+    !state.segments.length ||
+    state.segments.some((segment) => !segment.text.trim() || templateIssues(segment).length > 0);
   return (
-    <>
+    <div className="workbench-page">
       <PageHeading
         title={`Episode ${context.episode_index}`}
         subtitle={`${context.length} 帧 · ${(context.length / fps).toFixed(2)} 秒 · ${context.tasks.join(" / ")}`}
@@ -205,6 +218,10 @@ export function WorkbenchPage() {
             onFrameChange={videoSync.syncFrame}
             pointMarking={pointMarking}
             keyframePoint={selected?.fine_annotation?.keyframe_point}
+            gripperPoints={
+              selected?.fine_annotation?.skill === "Pick" ? selected.fine_annotation : undefined
+            }
+            currentFrame={videoSync.currentFrame}
             onPointMarked={(view, x, y) => {
               pointMarkedCallback.current?.({ frame: videoSync.currentFrame, view, x, y });
               pointMarkedCallback.current = undefined;
@@ -232,6 +249,7 @@ export function WorkbenchPage() {
               dispatch({ type: "redo" });
               setDirty(true);
             }}
+            onSeek={videoSync.syncFrame}
           />
           <Timeline
             segments={state.segments}
@@ -253,6 +271,43 @@ export function WorkbenchPage() {
           reviewing={reviewing}
           fps={fps}
           pointMarking={pointMarking}
+          onBeginGripperMark={(hand, onConfirm) => {
+            const frame = videoSync.currentFrame;
+            if (!selected || frame < selected.start_frame || frame >= selected.end_frame) {
+              message.warning("请先把播放头移动到当前标注段内");
+              return;
+            }
+            videoSync.pauseAll();
+            const view = Object.keys(context.video_urls).find((key) =>
+              key.toLowerCase().includes("head"),
+            );
+            const video = view ? videoSync.videos.current[view] : undefined;
+            if (!view || !video || video.readyState < 2 || !video.videoWidth) {
+              message.warning("HEAD 当前帧尚未就绪，请等待视频加载后重试");
+              return;
+            }
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              const drawing = canvas.getContext("2d");
+              if (!drawing) throw new Error("Canvas unavailable");
+              drawing.drawImage(video, 0, 0);
+              setGripperSession({
+                image: canvas.toDataURL("image/png"),
+                width: canvas.width,
+                height: canvas.height,
+                frame,
+                view,
+                hand,
+                group: selected.fine_annotation?.gripper_keyframes?.[hand],
+                onConfirm,
+              });
+            } catch {
+              message.error("无法读取 HEAD 画面，请检查视频加载状态后重试");
+            }
+          }}
+          onJumpFrame={videoSync.syncFrame}
           onBeginPointMark={(callback) => {
             if (
               !selected ||
@@ -275,6 +330,9 @@ export function WorkbenchPage() {
           canSubmit={!submitDisabled}
         />
       </div>
+      {gripperSession && (
+        <GripperMarkModal session={gripperSession} onClose={() => setGripperSession(undefined)} />
+      )}
       <Modal
         open={clearOpen}
         title="清空全部标注？"
@@ -290,6 +348,6 @@ export function WorkbenchPage() {
         <p>当前任务中的标注文字会清空并合并为一个完整片段，原始数据文件不会改变。</p>
       </Modal>
       <span className="sr-only">{formatFrameTime(videoSync.currentFrame, fps)}</span>
-    </>
+    </div>
   );
 }

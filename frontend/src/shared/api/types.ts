@@ -36,7 +36,18 @@ export type FineStage = {
   keyframe: string;
   logic: string;
 };
+export type KeyframePoint = { frame: number; view: string; x: number; y: number };
+export type OperatorHand = "left" | "right";
+export type JawMark = { visibility: "visible"; x: number; y: number } | { visibility: "invisible" };
+export type GripperKeyframe = {
+  frame: number;
+  view: string;
+  left?: JawMark;
+  right?: JawMark;
+};
 export type FineAnnotation = {
+  template_version?: 1;
+  template_values?: Record<string, string>;
   skill?: string;
   operator_hand?: "左手" | "右手" | "双手" | "";
   object_name: string;
@@ -46,12 +57,9 @@ export type FineAnnotation = {
   position_start: string;
   position_end: string;
   hand_state?: "张开->闭合" | "闭合->张开" | "保持闭合" | "保持张开" | "";
-  keyframe_point?: {
-    frame: number;
-    view: string;
-    x: number;
-    y: number;
-  };
+  keyframe_point?: KeyframePoint;
+  keyframe_points?: { left?: KeyframePoint; right?: KeyframePoint };
+  gripper_keyframes?: Partial<Record<OperatorHand, GripperKeyframe>>;
   outcome: "success" | "failure";
   end_condition: string;
   actions: FineAction[];

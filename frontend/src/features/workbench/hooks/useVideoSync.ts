@@ -5,6 +5,7 @@ type VideoMap = Record<string, HTMLVideoElement | null>;
 
 export function useVideoSync(length: number, fps: number) {
   const videos = useRef<VideoMap>({});
+  const initializedVideos = useRef(new WeakSet<HTMLVideoElement>());
   const playbackRange = useRef<{ endFrame: number } | null>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -13,7 +14,8 @@ export function useVideoSync(length: number, fps: number) {
   const registerVideo = useCallback(
     (key: string, element: HTMLVideoElement | null) => {
       videos.current[key] = element;
-      if (element) {
+      if (element && !initializedVideos.current.has(element)) {
+        initializedVideos.current.add(element);
         element.playbackRate = rate;
         element.currentTime = currentFrame / fps;
       }

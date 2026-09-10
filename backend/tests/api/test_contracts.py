@@ -1,7 +1,12 @@
+import json
+
 import pytest
 from app.core.permissions import current_user
+from app.features.work_items.service import validate_segments
+from app.infrastructure.annotation_storage import AnnotationStorage
 from app.main import app
 from app.models import Role, User
+from app.schemas import RevisionInput
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -128,6 +133,49 @@ def test_health_endpoint_returns_success(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize("grouped", [False, True])
+def test_pick_jaw_points_survive_revision_contract_and_storage(tmp_path, grouped):
+    points = {
+        "left": {"frame": 5, "view": "head", "x": 0.3, "y": 0.5},
+        "right": {"frame": 5, "view": "head", "x": 0.7, "y": 0.5},
+    }
+    payload = {
+        "schema_version": "segments.v1",
+        "segments": [
+            {
+                "id": "one",
+                "start_frame": 0,
+                "end_frame": 10,
+                "text": "夹持住物体。",
+                "fine_annotation": {
+                    "skill": "Pick",
+                    "template_version": 1,
+                    "keyframe_points": points,
+                },
+            }
+        ],
+    }
+    if grouped:
+        payload["segments"][0]["fine_annotation"]["gripper_keyframes"] = {
+            "left": {
+                "frame": 5,
+                "view": "head",
+                "left": {"visibility": "visible", "x": 0.3, "y": 0.5},
+                "right": {"visibility": "invisible"},
+            },
+            "right": {
+                "frame": 8,
+                "view": "head",
+                "left": {"visibility": "invisible"},
+                "right": {"visibility": "invisible"},
+            },
+        }
+    revision = RevisionInput(payload=payload)
+    validate_segments(revision, 10, require_text=True)
+    relative, _ = AnnotationStorage().write_revision(tmp_path, "item-1", 1, revision.payload)
+    assert json.loads((tmp_path / relative).read_text()) == payload
 
 
 def test_protected_endpoint_returns_unauthorized_without_user(client):

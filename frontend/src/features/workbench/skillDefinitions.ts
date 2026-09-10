@@ -1,118 +1,147 @@
-/**
- * The controlled vocabulary used by the fine-annotation panel.
- * Keep definitions here so the editor, validation, and export code share one source of truth.
- */
-export type SkillName =
-  | "Catch"
-  | "Cut"
-  | "Grasp"
-  | "Insert"
-  | "Pour"
-  | "CloseBox"
-  | "CloseJar"
-  | "Drop"
-  | "Hold"
-  | "HoldLargeObject"
-  | "OpenBox"
-  | "OpenJar"
-  | "Pull"
-  | "Scoop"
-  | "Stack"
-  | "Pick"
-  | "Place";
-
+export type SkillName = "Pick" | "Place" | "Grasp" | "Push" | "Pull";
+export type SentenceField = {
+  key: string;
+  label: string;
+  example: string;
+  options?: string[];
+  optional?: boolean;
+};
+export type SentenceToken = string | SentenceField;
 export type SkillDefinition = {
   name: SkillName;
+  label: string;
   keyframeDefinition: string;
   requiredObjects: string[];
+  tokens: SentenceToken[];
 };
-
-export const SKILL_DEFINITIONS: readonly SkillDefinition[] = [
-  {
-    name: "Catch",
-    keyframeDefinition: "手/夹爪接住运动物体，物体开始被控制",
-    requiredObjects: ["被接住物体"],
-  },
-  {
-    name: "Cut",
-    keyframeDefinition: "刀具第一次接触并切入或使物体变形",
-    requiredObjects: ["刀具", "被切物"],
-  },
-  {
-    name: "Grasp",
-    keyframeDefinition: "手/夹爪形成稳定夹持，物体不再滑动",
-    requiredObjects: ["被抓物体"],
-  },
-  {
-    name: "Insert",
-    keyframeDefinition: "被插入物体的前端接触孔口并开始进入",
-    requiredObjects: ["插入物", "目标孔/容器"],
-  },
-  {
-    name: "Pour",
-    keyframeDefinition: "液体第一次连续流入目标容器",
-    requiredObjects: ["源容器", "目标容器"],
-  },
-  {
-    name: "CloseBox",
-    keyframeDefinition: "盒盖接触盒体并开始关闭",
-    requiredObjects: ["盒盖", "盒体"],
-  },
-  {
-    name: "CloseJar",
-    keyframeDefinition: "瓶盖接触瓶口并开始旋紧或压合",
-    requiredObjects: ["瓶盖", "瓶身"],
-  },
-  {
-    name: "Drop",
-    keyframeDefinition: "物体脱离手/夹爪支撑并开始下落",
-    requiredObjects: ["被释放物体"],
-  },
-  {
-    name: "Hold",
-    keyframeDefinition: "物体被稳定支撑或持握，并开始随手移动",
-    requiredObjects: ["被持握物体"],
-  },
-  {
-    name: "HoldLargeObject",
-    keyframeDefinition: "第二只手接触大物体并形成共同支撑",
-    requiredObjects: ["大物体", "双手"],
-  },
-  { name: "OpenBox", keyframeDefinition: "盒盖开始离开盒体", requiredObjects: ["盒盖", "盒体"] },
-  {
-    name: "OpenJar",
-    keyframeDefinition: "瓶盖开始旋松、上升或脱离瓶身",
-    requiredObjects: ["瓶盖", "瓶身"],
-  },
-  {
-    name: "Pull",
-    keyframeDefinition: "物体接触后开始沿拉动方向移动",
-    requiredObjects: ["被拉物体"],
-  },
-  {
-    name: "Scoop",
-    keyframeDefinition: "勺/铲接触材料并开始聚拢或舀取",
-    requiredObjects: ["工具", "被舀材料"],
-  },
-  {
-    name: "Stack",
-    keyframeDefinition: "上方物体第一次接触下方物体并开始承重",
-    requiredObjects: ["上方物体", "下方物体"],
-  },
+const field = (
+  key: string,
+  label: string,
+  example: string,
+  options?: string[],
+  optional?: boolean,
+): SentenceField => ({ key, label, example, options, optional });
+const states = ["张开", "闭合", "无法判断"];
+const actions = ["张开", "闭合", "保持张开", "保持闭合", "无法判断"];
+const object: SentenceToken[] = [
+  field("object_color", "颜色（选填）", "如：绿色", undefined, true),
+  field("object_material", "材质（选填）", "如：塑料", undefined, true),
+  field("object_shape", "形状（选填）", "如：圆柱形", undefined, true),
+  field("object_name", "物体名称", "如：黄瓜"),
+];
+const posture: SentenceToken[] = [
+  "，夹爪以相对",
+  field("reference", "姿态参考", "如：物体长轴"),
+  field("orientation", "相对姿态", "选择姿态", ["垂直", "平行", "倾斜", "无法判断"]),
+  "的姿态，",
+];
+const contact: SentenceToken[] = [
+  "在其",
+  field("contact_point", "接触部位", "如：两侧"),
+  field("gripper_action", "夹爪动作", "选择动作", actions),
+  "夹爪，",
+];
+function tokens(name: SkillName): SentenceToken[] {
+  const start: SentenceToken[] = [
+    field("operator_hand", "操作手", "选择操作手", ["左手", "右手", "双手"]),
+    "夹爪初始位于",
+    field("initial_position", "夹爪初始位置", "如：货架前侧"),
+    "，状态为",
+    field("initial_state", "初始夹爪状态", "选择状态", states),
+  ];
+  if (name === "Place")
+    return [
+      ...start,
+      "，持握",
+      ...object,
+      "，向",
+      field("approach", "靠近目标位置", "如：托盘上方"),
+      "移动",
+      ...posture,
+      "将物体放置在",
+      field("position_end", "放置位置", "如：托盘中央"),
+      "，待其受到支撑后",
+      field("gripper_action", "释放时夹爪动作", "选择动作", actions),
+      "夹爪。",
+    ];
+  const base: SentenceToken[] = [
+    ...start,
+    ...(name === "Pick"
+      ? ["。靠近位于"]
+      : ["，向", field("approach", "靠近目标位置", "如：货架右上方"), "移动。靠近位于"]),
+    field("object_location", "物体所在位置", "如：货架右侧"),
+    "的",
+    ...object,
+    ...posture,
+  ];
+  if (name === "Grasp") return [...base, ...contact, "形成稳定抓握。"];
+  if (name === "Pick") return [...base, ...contact, "夹持住物体。"];
+  const action = name === "Push" ? "推动" : "拉动";
+  return [
+    ...base,
+    ...(name === "Push"
+      ? [
+          field("gripper_action", "接触时夹爪动作", "选择动作", actions),
+          "并接触其",
+          field("contact_point", "接触部位", "如：左侧面"),
+          "，",
+        ]
+      : contact),
+    "向",
+    field("direction", action + "方向", "如：柜体外侧"),
+    action + "物体，使其移动至",
+    field("position_end", "物体结束位置", "如：半开位置"),
+    "。",
+  ];
+}
+export const SKILL_DEFINITIONS: SkillDefinition[] = [
   {
     name: "Pick",
-    keyframeDefinition: "物体第一次脱离原支撑面",
-    requiredObjects: ["被拾取物体", "原支撑面"],
+    label: "拾取",
+    keyframeDefinition: "物体被夹爪夹持住的瞬间",
+    requiredObjects: ["每只操作手夹持物体时的左夹和右夹位置；看不见的夹指标为不可见"],
+    tokens: tokens("Pick"),
   },
   {
     name: "Place",
-    keyframeDefinition: "物体第一次接触目标位置并开始卸载",
-    requiredObjects: ["被放置物体", "目标位置"],
+    label: "放置",
+    keyframeDefinition: "物体第一次接触目标支撑面",
+    requiredObjects: ["被放置物体", "目标支撑面"],
+    tokens: tokens("Place"),
   },
-] as const;
-
-export const SKILL_OPTIONS = SKILL_DEFINITIONS.map(({ name }) => ({ value: name, label: name }));
-
-export function getSkillDefinition(skill: string): SkillDefinition | undefined {
+  {
+    name: "Grasp",
+    label: "抓握",
+    keyframeDefinition: "夹爪形成稳定夹持、物体开始被控制",
+    requiredObjects: ["被抓物体"],
+    tokens: tokens("Grasp"),
+  },
+  {
+    name: "Push",
+    label: "推动",
+    keyframeDefinition: "物体因推动第一次开始移动",
+    requiredObjects: ["被推物体"],
+    tokens: tokens("Push"),
+  },
+  {
+    name: "Pull",
+    label: "拉动",
+    keyframeDefinition: "物体因拉动第一次开始移动",
+    requiredObjects: ["被拉物体"],
+    tokens: tokens("Pull"),
+  },
+];
+export function getSkillDefinition(skill: string) {
   return SKILL_DEFINITIONS.find((definition) => definition.name === skill);
+}
+export function sentenceTokens(skill: string, values: Record<string, string>): SentenceToken[] {
+  return (getSkillDefinition(skill)?.tokens || []).flatMap((token): SentenceToken[] => {
+    if (typeof token === "string" || values.operator_hand !== "双手") return [token];
+    if (token.key !== "initial_state" && token.key !== "gripper_action") return [token];
+    return [
+      { ...token, key: token.key + "_left", label: "左手" + token.label },
+      "、",
+      { ...token, key: token.key + "_right", label: "右手" + token.label },
+    ];
+  });
 }
