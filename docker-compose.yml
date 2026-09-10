@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-annotate_tool}
       POSTGRES_USER: ${POSTGRES_USER:-annotate}
@@ -15,6 +16,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -23,6 +25,7 @@ services:
 
   api:
     build: ./backend
+    restart: unless-stopped
     env_file: .env
     command: sh -c "alembic upgrade head && python -m app.cli bootstrap-admin && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
@@ -35,6 +38,7 @@ services:
 
   worker:
     build: ./backend
+    restart: unless-stopped
     env_file: .env
     command: celery -A app.worker.celery worker --loglevel=INFO --concurrency=2
     volumes:
@@ -47,6 +51,7 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "18000:80"
     depends_on:
