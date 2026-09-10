@@ -42,6 +42,7 @@ export function useVideoSync(length: number, fps: number) {
     setPlaying(true);
   }, []);
   const pauseAll = useCallback(() => {
+    playbackRange.current = null;
     Object.values(videos.current).forEach((video) => video?.pause());
     setPlaying(false);
   }, []);

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal, Typography, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
-import type { Segment, WorkContext } from "../../shared/api/types";
+import type { FineAnnotation, Segment, WorkContext } from "../../shared/api/types";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { workbenchApi } from "./api";
@@ -35,6 +35,10 @@ export function WorkbenchPage() {
   const [zoom, setZoom] = useState(1);
   const [revision, setRevision] = useState<WorkContext["latest_revision"]>(null);
   const initialized = useRef(false);
+  const pointMarkedCallback = useRef<
+    ((point: NonNullable<FineAnnotation["keyframe_point"]>) => void) | undefined
+  >(undefined);
+  const [pointMarking, setPointMarking] = useState(false);
   const { data: context } = useQuery({
     queryKey: queryKeys.workContext(itemId),
     queryFn: () => workbenchApi.context(itemId),
@@ -114,10 +118,10 @@ export function WorkbenchPage() {
     onError: (error: Error) => message.error(error.message),
   });
 
-  const onTextChange = useCallback(
-    (text: string) => {
+  const onFineChange = useCallback(
+    (fine_annotation: FineAnnotation, text: string) => {
       if (!selected) return;
-      dispatch({ type: "update-text", id: selected.id, text });
+      dispatch({ type: "update-fine", id: selected.id, fine_annotation, text });
       setDirty(true);
     },
     [selected],
@@ -155,13 +159,11 @@ export function WorkbenchPage() {
   );
   const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), []);
   const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), []);
-  const onSelectSegment = useCallback(
-    (segment: Segment) => {
-      setSelectedId(segment.id);
-      videoSync.playSegment(segment.start_frame, segment.end_frame);
-    },
-    [videoSync],
-  );
+  const onSelectSegment = useCallback((segment: Segment) => {
+    pointMarkedCallback.current = undefined;
+    setPointMarking(false);
+    setSelectedId(segment.id);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -201,6 +203,14 @@ export function WorkbenchPage() {
             pauseAll={videoSync.pauseAll}
             changeRate={videoSync.changeRate}
             onFrameChange={videoSync.syncFrame}
+            pointMarking={pointMarking}
+            keyframePoint={selected?.fine_annotation?.keyframe_point}
+            onPointMarked={(view, x, y) => {
+              pointMarkedCallback.current?.({ frame: videoSync.currentFrame, view, x, y });
+              pointMarkedCallback.current = undefined;
+              setPointMarking(false);
+              message.success("关键帧位置已记录");
+            }}
           />
           <WorkbenchToolbar
             currentFrame={videoSync.currentFrame}
@@ -235,13 +245,28 @@ export function WorkbenchPage() {
             onMoveBoundary={onMoveBoundary}
             onBoundaryDragStart={onBoundaryDragStart}
             onBoundaryDragEnd={onBoundaryDragEnd}
+            onInteractionStart={videoSync.pauseAll}
           />
         </section>
         <SegmentEditor
           selected={selected}
           reviewing={reviewing}
           fps={fps}
-          onTextChange={onTextChange}
+          pointMarking={pointMarking}
+          onBeginPointMark={(callback) => {
+            if (
+              !selected ||
+              videoSync.currentFrame < selected.start_frame ||
+              videoSync.currentFrame >= selected.end_frame
+            ) {
+              message.warning("请先把播放头移动到当前标注段内");
+              return;
+            }
+            videoSync.pauseAll();
+            pointMarkedCallback.current = callback;
+            setPointMarking(true);
+          }}
+          onFineChange={onFineChange}
           onSave={() => saveDraft.mutate()}
           onSubmit={() => submit.mutate()}
           onReview={(decision) => review.mutate(decision)}

@@ -14,6 +14,7 @@ export function Timeline({
   onMoveBoundary,
   onBoundaryDragStart,
   onBoundaryDragEnd,
+  onInteractionStart,
 }: {
   segments: Segment[];
   selectedId?: string;
@@ -26,10 +27,17 @@ export function Timeline({
   onMoveBoundary: (index: number, frame: number) => void;
   onBoundaryDragStart: () => void;
   onBoundaryDragEnd: () => void;
+  onInteractionStart: () => void;
 }) {
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ index: number } | null>(null);
   const seekRef = useRef(false);
+  const seekAt = (clientX: number) => {
+    if (!timelineRef.current) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    onSeek(Math.round(ratio * length));
+  };
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -59,9 +67,20 @@ export function Timeline({
         className="timeline-track"
         ref={timelineRef}
         style={{ width: `${zoom * 100}%` }}
+        onPointerDown={(event) => {
+          const target = event.target;
+          if (
+            event.currentTarget !== target &&
+            (!(target instanceof Element) || !target.closest(".timeline-axis"))
+          )
+            return;
+          onInteractionStart();
+          seekAt(event.clientX);
+          seekRef.current = true;
+        }}
         onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          onSeek(Math.round(((event.clientX - rect.left) / rect.width) * length));
+          onInteractionStart();
+          seekAt(event.clientX);
         }}
       >
         <div
@@ -76,9 +95,17 @@ export function Timeline({
               left: `${frameToPercent(segment.start_frame, length)}%`,
               width: `${frameToPercent(segment.end_frame - segment.start_frame, length)}%`,
             }}
-            onClick={(event) => {
+            onPointerDown={(event) => {
+              const target = event.target;
+              if (target instanceof Element && target.closest(".timeline-divider")) return;
               event.stopPropagation();
               onSelect(segment);
+              onInteractionStart();
+              seekAt(event.clientX);
+              seekRef.current = true;
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
             }}
           >
             <span>
@@ -90,9 +117,11 @@ export function Timeline({
                 aria-label="拖动调整片段分界"
                 onPointerDown={(event) => {
                   event.stopPropagation();
+                  onInteractionStart();
                   onBoundaryDragStart();
                   dragRef.current = { index };
                 }}
+                onClick={(event) => event.stopPropagation()}
               />
             )}
           </div>
@@ -110,6 +139,8 @@ export function Timeline({
           style={{ left: `${frameToPercent(currentFrame, length)}%` }}
           onPointerDown={(event) => {
             event.stopPropagation();
+            onInteractionStart();
+            seekAt(event.clientX);
             seekRef.current = true;
           }}
         />

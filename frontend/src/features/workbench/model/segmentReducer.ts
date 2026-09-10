@@ -49,6 +49,20 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
           segment.id === action.id ? { ...segment, text: action.text } : segment,
         ),
       );
+    case "update-fine":
+      return commit(
+        state,
+        state.segments.map((segment) =>
+          segment.id === action.id
+            ? {
+                ...segment,
+                original_text: segment.original_text ?? segment.text,
+                fine_annotation: action.fine_annotation,
+                text: action.text,
+              }
+            : segment,
+        ),
+      );
     case "split": {
       const selected = state.segments.find((segment) => segment.id === action.id);
       if (!selected || action.frame <= selected.start_frame || action.frame >= selected.end_frame) {
