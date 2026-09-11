@@ -15,14 +15,22 @@ import { useAutosave } from "./hooks/useAutosave";
 import { useVideoSync } from "./hooks/useVideoSync";
 import { createBlankSegment, createWorkbenchState, segmentReducer } from "./model/segmentReducer";
 import { formatFrameTime } from "./model/timelineMath";
-import { templateIssues } from "./model/fineAnnotation";
+import { currentFineAnnotation, fineAnnotationText, templateIssues } from "./model/fineAnnotation";
 import { isSkillEnabled } from "./skillAvailability";
 import { GripperMarkModal, type GripperMarkSession } from "./components/GripperMarkModal";
 
 function initialSegments(context: WorkContext): Segment[] {
   const segments = context.latest_revision?.payload.segments;
   return Array.isArray(segments) && segments.length > 0
-    ? segments
+    ? segments.map((segment) => {
+        const fine = currentFineAnnotation(segment);
+        return {
+          ...segment,
+          original_text: segment.original_text ?? segment.text,
+          fine_annotation: fine,
+          text: fineAnnotationText(fine),
+        };
+      })
     : [createBlankSegment(context.length)];
 }
 

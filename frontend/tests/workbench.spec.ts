@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { SKILL_OPTIONS, isSkillEnabled } from "../src/features/workbench/skillAvailability";
 import type { AnnotationPayload } from "../src/shared/api/types";
+import { currentFineAnnotation } from "../src/features/workbench/model/fineAnnotation";
 
 const project = { id: "project-1", name: "测试项目", is_active: true };
 const annotator = {
@@ -62,6 +63,47 @@ const contextFor = (item: typeof annotatorItem, userId: string) => ({
     file_hash: "a".repeat(64),
   },
 });
+
+function completedContext(userId: string) {
+  const context = contextFor(annotatorItem, userId);
+  const segment = context.latest_revision.payload.segments[0];
+  return {
+    ...context,
+    latest_revision: {
+      ...context.latest_revision,
+      payload: {
+        segments: [
+          {
+            ...segment,
+            fine_annotation: {
+              ...currentFineAnnotation(segment),
+              skill: "Pick",
+              template_values: {
+                operator_hand: "左手",
+                initial_position: "货架前侧",
+                initial_state: "张开",
+                object_location: "货架中央",
+                object_name: "杯子",
+                reference: "杯身",
+                orientation: "平行",
+                contact_point: "两侧",
+                gripper_action: "闭合",
+              },
+              gripper_keyframes: {
+                left: {
+                  frame: 5,
+                  view: "head",
+                  left: { visibility: "invisible" },
+                  right: { visibility: "invisible" },
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  };
+}
 
 async function mockShell(page: Page, user: typeof annotator | typeof reviewer) {
   await page.route("**/api/v1/work-items/item-1/draft", (route) =>
@@ -125,14 +167,16 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await page.goto("/packages");
   await page.goto("/work/item-1");
   await expect(page.getByRole("heading", { name: "Episode 0" })).toBeVisible();
-  await expect(page.getByText("pick the object").first()).toBeVisible();
+  await expect(page.getByText("pick the object")).toHaveCount(0);
+  await expect(page.locator(".fine-preview")).toHaveText("【请选择技能】");
+  await expect(page.getByRole("button", { name: "提交审核" })).toBeDisabled();
   await expect(page.locator(".segment-editor")).not.toContainText("原标注句");
 
   const track = page.locator(".timeline-track");
   await track.click({ position: { x: 550, y: 95 } });
   await page.getByRole("button", { name: "分段" }).click();
   await expect(page.locator(".timeline-segment")).toHaveCount(2);
-  await expect(page.getByText("未填写")).toBeVisible();
+  await expect(page.locator(".timeline-segment").last()).toContainText("【请选择技能】");
 
   await page.locator(".timeline-segment").first().click();
   await track.click({ position: { x: 250, y: 95 } });
@@ -170,10 +214,15 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await page.getByRole("dialog").getByRole("button").last().click();
   await expect.poll(() => clearCalls).toBe(1);
   await expect(page.locator(".timeline-segment")).toHaveCount(1);
-  await expect(page.locator(".timeline-segment")).toContainText("未填写");
+  await expect(page.locator(".timeline-segment")).toContainText("【请选择技能】");
 
+  await page.route("**/api/v1/work-items/item-1/context", (route) =>
+    route.fulfill({ json: completedContext(annotator.id) }),
+  );
   await page.reload();
-  await expect(page.getByText("pick the object").first()).toBeVisible();
+  await expect(page.locator(".fine-preview")).toHaveText(
+    "左手夹爪初始位于货架前侧，状态为张开。靠近位于货架中央的杯子，夹爪以相对杯身平行的姿态，在其两侧闭合夹爪，夹持住物体。",
+  );
   await page.getByRole("button", { name: "提交审核" }).click();
   await expect.poll(() => submitCalls).toBe(1);
   await expect(page).toHaveURL(/\/packages$/);
@@ -241,6 +290,9 @@ test("skill selection switches sentence fields without losing shared input", asy
 
 test("reviewer can approve an assigned task", async ({ page }) => {
   await mockShell(page, reviewer);
+  await page.route("**/api/v1/work-items/item-1/context", (route) =>
+    route.fulfill({ json: completedContext(reviewer.id) }),
+  );
   let reviewDecision: string | undefined;
   await page.route("**/api/v1/work-items/item-1/review", async (route) => {
     const body = route.request().postDataJSON() as { decision?: string };
@@ -260,6 +312,42 @@ test("reviewer can approve an assigned task", async ({ page }) => {
   await page.getByRole("button", { name: "审核通过" }).click();
   await expect.poll(() => reviewDecision).toBe("approve");
   await expect(page).toHaveURL(/\/packages$/);
+});
+
+test("imported skill immediately previews its template and saves current input", async ({
+  page,
+}, testInfo) => {
+  await mockShell(page, annotator);
+  const context = contextFor(annotatorItem, annotator.id);
+  let payload: AnnotationPayload = {
+    segments: [{ ...context.latest_revision.payload.segments[0], skill: "Pick" }],
+  };
+  await page.route("**/api/v1/work-items/item-1/context", (route) =>
+    route.fulfill({
+      json: { ...context, latest_revision: { ...context.latest_revision, payload } },
+    }),
+  );
+  await page.route("**/api/v1/work-items/item-1/draft", (route) => {
+    payload = (route.request().postDataJSON() as { payload: AnnotationPayload }).payload;
+    return route.fulfill({ json: annotatorItem });
+  });
+  await page.goto("/work/item-1");
+  const preview = page.locator(".fine-preview");
+  await expect(preview).toContainText("【操作手】夹爪初始位于【夹爪初始位置】");
+  await expect(page.locator(".timeline-segment")).toContainText("【物体名称】");
+  await expect(page.getByText("pick the object")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "最终标注结果" })).toContainText("待填写：操作手");
+  await page.getByRole("textbox", { name: "物体名称", exact: true }).fill("新杯子");
+  await expect(preview).toContainText("新杯子");
+  await expect(preview).not.toContainText("【物体名称】");
+  await expect(page.locator(".timeline-segment")).toContainText("新杯子");
+  await page.screenshot({ path: testInfo.outputPath("current-template-preview.png") });
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect.poll(() => payload.segments?.[0].text).toContain("新杯子");
+  expect(payload.segments?.[0].text).not.toContain("pick the object");
+  await page.reload();
+  await expect(preview).toContainText("新杯子");
+  await expect(page.getByRole("button", { name: "提交审核" })).toBeDisabled();
 });
 
 test("Pick saves and reloads both jaw landmarks", async ({ page }, testInfo) => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Segment } from "../../../shared/api/types";
 import { formatFrameTime, frameToPercent } from "../model/timelineMath";
+import { currentFineAnnotation, fineAnnotationText } from "../model/fineAnnotation";
 
 export function Timeline({
   segments,
@@ -108,8 +109,8 @@ export function Timeline({
               event.stopPropagation();
             }}
           >
-            <span>
-              {index + 1}. {segment.text || "未填写"}
+            <span title={fineAnnotationText(currentFineAnnotation(segment))}>
+              {index + 1}. {fineAnnotationText(currentFineAnnotation(segment))}
             </span>
             {index > 0 && (
               <i

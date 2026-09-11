@@ -7,7 +7,14 @@ The same tokens render labelled inputs and generate segment text. This prevents 
 and saved sentence from drifting apart. Domain rules are in ../annotation-rules.md.
 New optional fine_annotation.template_values and template_version fields preserve the
 segments.v1 HTTP contract. Existing payload fields remain intact; no database migration is needed.
-UI validation applies to version 1 templates. The backend continues generic segment validation;
+The workbench renders current skill templates immediately, including imported segments without
+template values. Required empty or invalid fields appear as labelled placeholders, and the
+timeline uses the same generated sentence as the result preview. Legacy text and unstructured
+fields do not supply template answers; existing template values remain editable. Loading a
+revision retains segment boundaries and original_text, while its working copy uses generated
+text and version 1 validation. Saving persists that working copy through the existing revision
+API; loading alone does not write files. Source dataset files remain untouched.
+UI validation applies to all workbench segments. The backend continues generic segment validation;
 clients outside this UI are not guaranteed to enforce template completeness.
 
 Template lookup and rendering are independent of availability. enabledSkills.ts owns the

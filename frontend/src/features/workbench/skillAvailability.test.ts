@@ -33,8 +33,8 @@ describe("skill availability", () => {
       recovery: "",
       notes: "",
     };
-    expect(fineAnnotationText(fine, "")).toContain("黄瓜");
-    expect(fineAnnotationText(fine, "")).toContain("形成稳定抓握");
+    expect(fineAnnotationText(fine)).toContain("黄瓜");
+    expect(fineAnnotationText(fine)).toContain("形成稳定抓握");
     expect(
       templateIssues({
         id: "one",

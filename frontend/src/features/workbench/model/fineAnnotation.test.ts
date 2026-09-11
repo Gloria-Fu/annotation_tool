@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FineAnnotation } from "../../../shared/api/types";
-import { fineAnnotationText, templateIssues } from "./fineAnnotation";
+import { currentFineAnnotation, fineAnnotationText, templateIssues } from "./fineAnnotation";
 import { SKILL_DEFINITIONS, sentenceTokens } from "../skillDefinitions";
 
 vi.mock("../enabledSkills", () => ({
@@ -26,32 +26,53 @@ const annotation: FineAnnotation = {
 };
 
 describe("fineAnnotationText", () => {
-  it("assembles fields in natural sentence order", () => {
-    expect(fineAnnotationText(annotation, "original text")).toBe(
-      "左手 拾取 【颜色：绿色，材质：圆柱形水果】黄瓜，从货架的右边到机械臂上，手部状态为张开->闭合，接触点在两侧。",
-    );
+  it("shows current skill placeholders instead of legacy fields or imported text", () => {
+    const segment = {
+      id: "imported",
+      start_frame: 0,
+      end_frame: 10,
+      text: "Retrieve cucumber from the shelf.",
+      skill: "Pick",
+    };
+    const fine = currentFineAnnotation(segment);
+    expect(fineAnnotationText(fine)).toContain("【操作手】夹爪初始位于【夹爪初始位置】");
+    expect(fineAnnotationText(fine)).not.toContain(segment.text);
+    expect(fineAnnotationText(annotation)).not.toContain("黄瓜");
+    expect(templateIssues(segment)).toContain("操作手");
+    expect(segment.text).toBe("Retrieve cucumber from the shelf.");
   });
 
-  it("keeps the existing text until a fine annotation value is entered", () => {
+  it("asks for a skill when there is no template", () => {
     expect(
-      fineAnnotationText(
-        {
-          object_name: "",
-          object_color: "",
-          object_material: "",
-          contact_point: "",
-          position_start: "",
-          position_end: "",
-          outcome: "success",
-          end_condition: "",
-          actions: [],
-          failure_reason: "",
-          recovery: "",
-          notes: "",
-        },
-        "Retrieve cucumber from the shelf.",
-      ),
-    ).toBe("Retrieve cucumber from the shelf.");
+      fineAnnotationText({
+        object_name: "",
+        object_color: "",
+        object_material: "",
+        contact_point: "",
+        position_start: "",
+        position_end: "",
+        outcome: "success",
+        end_condition: "",
+        actions: [],
+        failure_reason: "",
+        recovery: "",
+        notes: "",
+      }),
+    ).toBe("【请选择技能】");
+  });
+
+  it("updates placeholders from current values and rejects invalid options", () => {
+    const fine = {
+      ...annotation,
+      template_version: 1 as const,
+      template_values: { operator_hand: "左手", object_name: "杯子", initial_state: "旧状态" },
+    };
+    const text = fineAnnotationText(fine);
+    expect(text).toContain("左手夹爪");
+    expect(text).toContain("杯子");
+    expect(text).not.toContain("【物体名称】");
+    expect(text).toContain("【初始夹爪状态】");
+    expect(text).not.toContain("旧状态");
   });
 });
 
@@ -90,7 +111,7 @@ it("only exposes the five supported skills with distinct outcomes", () => {
       id: "one",
       start_frame: 0,
       end_frame: 10,
-      text: fineAnnotationText(fine, ""),
+      text: fineAnnotationText(fine),
       fine_annotation: fine,
     };
     expect(templateIssues(segment)).toEqual([]);
@@ -110,15 +131,12 @@ it("requires separate hand states and excludes hidden skill fields from text", (
   expect(keys).toContain("gripper_action_right");
   expect(keys).not.toContain("position_end");
   expect(
-    fineAnnotationText(
-      {
-        ...annotation,
-        skill: "Grasp",
-        template_version: 1,
-        template_values: { position_end: "不应出现的终点" },
-      },
-      "",
-    ),
+    fineAnnotationText({
+      ...annotation,
+      skill: "Grasp",
+      template_version: 1,
+      template_values: { position_end: "不应出现的终点" },
+    }),
   ).not.toContain("不应出现的终点");
 });
 
@@ -127,14 +145,11 @@ it("ends Pick at holding and ignores obsolete movement fields", () => {
     typeof token === "string" ? [] : [token.key],
   );
   for (const key of ["approach", "support", "position_end"]) expect(keys).not.toContain(key);
-  const text = fineAnnotationText(
-    {
-      ...annotation,
-      template_version: 1,
-      template_values: { approach: "旧靠近位置", support: "旧支撑面", position_end: "旧终点" },
-    },
-    "",
-  );
+  const text = fineAnnotationText({
+    ...annotation,
+    template_version: 1,
+    template_values: { approach: "旧靠近位置", support: "旧支撑面", position_end: "旧终点" },
+  });
   expect(text).toMatch(/夹持住物体。$/);
   expect(text).not.toContain("旧");
 });

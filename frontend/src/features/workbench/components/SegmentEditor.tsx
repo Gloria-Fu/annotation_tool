@@ -8,27 +8,9 @@ import type {
 } from "../../../shared/api/types";
 import { annotationHands, handLabel, completeGripper } from "../model/gripperKeyframes";
 import { durationSeconds, formatFrameTime } from "../model/timelineMath";
-import { fineAnnotationText, templateIssues } from "../model/fineAnnotation";
+import { currentFineAnnotation, fineAnnotationText, templateIssues } from "../model/fineAnnotation";
 import { getSkillDefinition, sentenceTokens } from "../skillDefinitions";
 import { isSkillEnabled, SKILL_OPTIONS } from "../skillAvailability";
-
-const emptyFine = (): FineAnnotation => ({
-  skill: "",
-  operator_hand: "",
-  object_name: "",
-  object_color: "",
-  object_material: "",
-  contact_point: "",
-  position_start: "",
-  position_end: "",
-  hand_state: "",
-  outcome: "success",
-  end_condition: "",
-  actions: [],
-  failure_reason: "",
-  recovery: "",
-  notes: "",
-});
 
 export function SegmentEditor({
   selected,
@@ -71,21 +53,15 @@ export function SegmentEditor({
         </Typography.Text>
       </aside>
     );
-  const fine = { ...emptyFine(), ...(selected.fine_annotation || {}) };
+  const fine = currentFineAnnotation(selected);
   const update = (patch: Partial<FineAnnotation>) => {
     const next = { ...fine, ...patch };
-    onFineChange(next, fineAnnotationText(next, selected.text));
+    onFineChange(next, fineAnnotationText(next));
   };
   const definition = getSkillDefinition(fine.skill || selected.skill || "");
   const enabled = isSkillEnabled(fine.skill || selected.skill || "");
-  const values: Record<string, string> = fine.template_values || {
-    operator_hand: fine.operator_hand || "",
-    object_name: fine.object_name,
-    object_color: fine.object_color,
-    object_material: fine.object_material,
-    contact_point: fine.contact_point,
-    position_end: fine.position_end,
-  };
+  const values = fine.template_values || {};
+  const issues = templateIssues(selected);
   const updateValue = (key: string, value: string) =>
     update({
       skill: definition?.name,
@@ -101,11 +77,9 @@ export function SegmentEditor({
       </div>
       <section className="editor-result" aria-label="最终标注结果">
         <Typography.Text strong>最终标注结果</Typography.Text>
-        <div className="fine-preview">{fineAnnotationText(fine, selected.text)}</div>
-        {templateIssues(selected).length > 0 && (
-          <Typography.Paragraph type="warning">
-            待填写：{templateIssues(selected).join("、")}
-          </Typography.Paragraph>
+        <div className="fine-preview">{fineAnnotationText(fine)}</div>
+        {issues.length > 0 && (
+          <Typography.Paragraph type="warning">待填写：{issues.join("、")}</Typography.Paragraph>
         )}
       </section>
       <div className="editor-fields">
