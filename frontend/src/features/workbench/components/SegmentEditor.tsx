@@ -172,7 +172,7 @@ export function SegmentEditor({
             </div>
           </div>
         )}
-        {definition?.name === "Pick" ? (
+        {definition?.name === "Pick" || definition?.name === "Place" ? (
           <div>
             <Typography.Text strong>关键帧位置</Typography.Text>
             {annotationHands(fine).length === 0 && (

@@ -53,7 +53,7 @@ export function templateIssues(segment: Segment): string[] {
       point.y < 0 ||
       point.y > 1
     );
-  if (skill === "Pick") {
+  if (skill === "Pick" || skill === "Place") {
     missing.push(...gripperIssues(fine, segment.start_frame, segment.end_frame));
   } else if (!validPoint(fine.keyframe_point)) missing.push("片段内关键帧位置");
   return missing;

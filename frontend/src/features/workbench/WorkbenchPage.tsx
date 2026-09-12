@@ -227,7 +227,10 @@ export function WorkbenchPage() {
             pointMarking={pointMarking}
             keyframePoint={selected?.fine_annotation?.keyframe_point}
             gripperPoints={
-              selected?.fine_annotation?.skill === "Pick" ? selected.fine_annotation : undefined
+              selected?.fine_annotation?.skill === "Pick" ||
+              selected?.fine_annotation?.skill === "Place"
+                ? selected.fine_annotation
+                : undefined
             }
             currentFrame={videoSync.currentFrame}
             onPointMarked={(view, x, y) => {

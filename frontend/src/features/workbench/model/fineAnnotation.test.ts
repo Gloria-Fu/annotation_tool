@@ -117,7 +117,9 @@ it("only exposes the five supported skills with distinct outcomes", () => {
     expect(templateIssues(segment)).toEqual([]);
     expect(segment.text).not.toContain("【");
     expect(templateIssues({ ...segment, end_frame: 5 })).toContain(
-      skill.name === "Pick" ? "左手片段内 HEAD 关键帧" : "片段内关键帧位置",
+      skill.name === "Pick" || skill.name === "Place"
+        ? "左手片段内 HEAD 关键帧"
+        : "片段内关键帧位置",
     );
     delete values.orientation;
     expect(templateIssues(segment)).toContain("相对姿态");
