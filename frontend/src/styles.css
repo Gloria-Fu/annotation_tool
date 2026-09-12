@@ -101,7 +101,7 @@ body {
 .editor-result-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   min-height: 32px;
 }
@@ -110,11 +110,9 @@ body {
 }
 .segment-navigation {
   display: flex;
-  width: 100%;
-  margin-top: 10px;
+  margin-left: 4px;
 }
 .segment-navigation .ant-btn {
-  flex: 1;
   min-width: 0;
   height: 32px;
   padding-inline: 10px;

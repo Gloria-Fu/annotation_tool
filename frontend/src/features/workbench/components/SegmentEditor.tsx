@@ -97,18 +97,18 @@ export function SegmentEditor({
                 ? "标注中"
                 : "未标注"}
           </Tag>
+          <Space className="segment-navigation" size="small">
+            <Button size="small" onClick={() => onNavigate("previous")}>
+              上一段
+            </Button>
+            <Button size="small" onClick={() => onNavigate("replay")}>
+              重播
+            </Button>
+            <Button size="small" onClick={() => onNavigate("next")}>
+              下一段
+            </Button>
+          </Space>
         </div>
-        <Space className="segment-navigation" size="small">
-          <Button size="small" onClick={() => onNavigate("previous")}>
-            上一段
-          </Button>
-          <Button size="small" onClick={() => onNavigate("replay")}>
-            重播
-          </Button>
-          <Button size="small" onClick={() => onNavigate("next")}>
-            下一段
-          </Button>
-        </Space>
         <div className="fine-preview">{fineAnnotationText(fine)}</div>
         {issues.length > 0 && (
           <Typography.Paragraph type="warning">待填写：{issues.join("、")}</Typography.Paragraph>
