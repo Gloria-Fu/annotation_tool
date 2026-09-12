@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { Segment } from "../../../shared/api/types";
 import { formatFrameTime, frameToPercent } from "../model/timelineMath";
-import { currentFineAnnotation, fineAnnotationText } from "../model/fineAnnotation";
+import { currentFineAnnotation } from "../model/fineAnnotation";
+import { getSkillDefinition } from "../skillDefinitions";
 
 export function Timeline({
   segments,
@@ -109,8 +110,14 @@ export function Timeline({
               event.stopPropagation();
             }}
           >
-            <span title={fineAnnotationText(currentFineAnnotation(segment))}>
-              {index + 1}. {fineAnnotationText(currentFineAnnotation(segment))}
+            <span>
+              {index + 1}.{" "}
+              {(() => {
+                const fine = currentFineAnnotation(segment);
+                const skill = fine.skill || segment.skill || "";
+                const definition = getSkillDefinition(skill);
+                return definition ? `${definition.label} (${definition.name})` : "未选择 Skill";
+              })()}
             </span>
             {index > 0 && (
               <i
