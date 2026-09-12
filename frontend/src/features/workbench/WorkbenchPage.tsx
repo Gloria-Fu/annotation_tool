@@ -178,11 +178,32 @@ export function WorkbenchPage() {
   );
   const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), []);
   const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), []);
-  const onSelectSegment = useCallback((segment: Segment) => {
-    pointMarkedCallback.current = undefined;
-    setPointMarking(false);
-    setSelectedId(segment.id);
-  }, []);
+  const onSelectSegment = useCallback(
+    (segment: Segment) => {
+      pointMarkedCallback.current = undefined;
+      setPointMarking(false);
+      setSelectedId(segment.id);
+      videoSync.playSegment(segment.start_frame, segment.end_frame);
+    },
+    [videoSync],
+  );
+  const navigateSegment = useCallback(
+    (direction: "previous" | "replay" | "next") => {
+      if (!selected) return;
+      const index = state.segments.findIndex((segment) => segment.id === selected.id);
+      const target =
+        direction === "previous"
+          ? state.segments[index - 1]
+          : direction === "next"
+            ? state.segments[index + 1]
+            : selected;
+      if (target) {
+        setSelectedId(target.id);
+        videoSync.playSegment(target.start_frame, target.end_frame);
+      }
+    },
+    [selected, state.segments, videoSync],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -201,7 +222,12 @@ export function WorkbenchPage() {
   if (!context) return null;
   const submitDisabled =
     !state.segments.length ||
-    state.segments.some((segment) => !segment.text.trim() || templateIssues(segment).length > 0);
+    state.segments.some(
+      (segment) =>
+        !segment.text.trim() ||
+        templateIssues(segment).length > 0 ||
+        segment.annotation_status !== "confirmed",
+    );
   return (
     <div className="workbench-page">
       <PageHeading
@@ -333,6 +359,8 @@ export function WorkbenchPage() {
             setPointMarking(true);
           }}
           onFineChange={onFineChange}
+          onConfirm={() => selected && dispatch({ type: "confirm", id: selected.id })}
+          onNavigate={navigateSegment}
           onSave={() => saveDraft.mutate()}
           onSubmit={() => submit.mutate()}
           onReview={(decision) => review.mutate(decision)}

@@ -18,6 +18,7 @@ export type Segment = {
   source?: string;
   skill?: string | null;
   fine_annotation?: FineAnnotation;
+  annotation_status?: "unannotated" | "in_progress" | "confirmed";
 };
 export type FineAction = {
   id: string;

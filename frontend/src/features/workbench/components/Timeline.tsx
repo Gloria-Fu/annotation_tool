@@ -101,8 +101,8 @@ export function Timeline({
               const target = event.target;
               if (target instanceof Element && target.closest(".timeline-divider")) return;
               event.stopPropagation();
-              onSelect(segment);
               onInteractionStart();
+              onSelect(segment);
               seekAt(event.clientX);
               seekRef.current = true;
             }}

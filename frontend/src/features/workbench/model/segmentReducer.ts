@@ -59,8 +59,16 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
                 original_text: segment.original_text ?? segment.text,
                 fine_annotation: action.fine_annotation,
                 text: action.text,
+                annotation_status: "in_progress",
               }
             : segment,
+        ),
+      );
+    case "confirm":
+      return commit(
+        state,
+        state.segments.map((segment) =>
+          segment.id === action.id ? { ...segment, annotation_status: "confirmed" } : segment,
         ),
       );
     case "split": {
@@ -91,7 +99,7 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
       if (!next[action.index - 1] || !next[action.index]) return state;
       next[action.index - 1].end_frame = frame;
       next[action.index].start_frame = frame;
-      return { ...state, segments: next };
+      return { ...state, segments: next.map((segment) => ({ ...segment, annotation_status: "in_progress" })) };
     }
     case "clear":
       return commit(state, [createBlankSegment(action.length)]);

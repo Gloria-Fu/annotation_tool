@@ -24,6 +24,8 @@ export function SegmentEditor({
   onSave,
   onSubmit,
   onReview,
+  onConfirm,
+  onNavigate,
   isSaving,
   isSubmitting,
   canSubmit,
@@ -41,6 +43,8 @@ export function SegmentEditor({
   onSave: () => void;
   onSubmit: () => void;
   onReview: (decision: "approve" | "request_changes") => void;
+  onConfirm: () => void;
+  onNavigate: (direction: "previous" | "replay" | "next") => void;
   isSaving: boolean;
   isSubmitting: boolean;
   canSubmit: boolean;
@@ -76,7 +80,35 @@ export function SegmentEditor({
         <Tag color={reviewing ? "gold" : "blue"}>{reviewing ? "待审核" : "编辑中"}</Tag>
       </div>
       <section className="editor-result" aria-label="最终标注结果">
-        <Typography.Text strong>最终标注结果</Typography.Text>
+        <div className="editor-result-heading">
+          <Typography.Text strong>最终标注结果</Typography.Text>
+          <Tag
+            color={
+              selected.annotation_status === "confirmed"
+                ? "green"
+                : selected.annotation_status === "in_progress"
+                  ? "blue"
+                  : "default"
+            }
+          >
+            {selected.annotation_status === "confirmed"
+              ? "已确认"
+              : selected.annotation_status === "in_progress"
+                ? "标注中"
+                : "未标注"}
+          </Tag>
+        </div>
+        <Space size="small" wrap style={{ marginTop: 8 }}>
+          <Button size="small" onClick={() => onNavigate("previous")}>
+            上一段
+          </Button>
+          <Button size="small" onClick={() => onNavigate("replay")}>
+            重播
+          </Button>
+          <Button size="small" onClick={() => onNavigate("next")}>
+            下一段
+          </Button>
+        </Space>
         <div className="fine-preview">{fineAnnotationText(fine)}</div>
         {issues.length > 0 && (
           <Typography.Paragraph type="warning">待填写：{issues.join("、")}</Typography.Paragraph>
@@ -261,6 +293,15 @@ export function SegmentEditor({
           showCount
         />
         <Space wrap style={{ marginTop: 14 }}>
+          {!reviewing && (
+            <Button
+              type={selected.annotation_status === "confirmed" ? "default" : "primary"}
+              onClick={onConfirm}
+              disabled={issues.length > 0 || !enabled}
+            >
+              {selected.annotation_status === "confirmed" ? "已确认标注结果" : "确认标注结果"}
+            </Button>
+          )}
           {!reviewing && (
             <Button onClick={onSave} disabled={!enabled} loading={isSaving}>
               保存草稿
