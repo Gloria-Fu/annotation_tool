@@ -98,7 +98,7 @@ export function SegmentEditor({
                 : "未标注"}
           </Tag>
         </div>
-        <Space size="small" wrap style={{ marginTop: 8 }}>
+        <Space className="segment-navigation" size="small">
           <Button size="small" onClick={() => onNavigate("previous")}>
             上一段
           </Button>

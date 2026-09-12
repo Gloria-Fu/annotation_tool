@@ -98,6 +98,35 @@ body {
 .editor-result .ant-typography {
   margin-bottom: 0;
 }
+.editor-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+.editor-result-heading .ant-typography {
+  font-size: 16px;
+}
+.segment-navigation {
+  display: flex;
+  width: 100%;
+  margin-top: 10px;
+}
+.segment-navigation .ant-btn {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding-inline: 10px;
+  color: #35594e;
+  border-color: #c9d9d3;
+  background: #f7fbf9;
+}
+.segment-navigation .ant-btn:hover {
+  color: #17624f;
+  border-color: #5a9a87;
+  background: #edf7f2;
+}
 .editor-fields {
   flex: 1;
   min-height: 0;
