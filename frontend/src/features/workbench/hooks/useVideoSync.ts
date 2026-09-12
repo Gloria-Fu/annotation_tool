@@ -53,6 +53,7 @@ export function useVideoSync(length: number, fps: number) {
       const start = clampFrame(startFrame, length);
       const end = clampFrame(endFrame, length);
       if (end <= start) return;
+      Object.values(videos.current).forEach((video) => video?.pause());
       playbackRange.current = { endFrame: end };
       const position = start / fps;
       Object.values(videos.current).forEach((video) => {
