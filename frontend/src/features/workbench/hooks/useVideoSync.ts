@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { clampFrame } from "../model/timelineMath";
 
 type VideoMap = Record<string, HTMLVideoElement | null>;
@@ -10,6 +10,20 @@ export function useVideoSync(length: number, fps: number) {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
+
+  useEffect(() => {
+    if (!playing) return;
+    const timer = window.setInterval(() => {
+      const endFrame = playbackRange.current?.endFrame;
+      const head = Object.values(videos.current).find((video) => video && !video.paused);
+      if (endFrame === undefined || !head || head.currentTime * fps < endFrame) return;
+      playbackRange.current = null;
+      Object.values(videos.current).forEach((video) => video?.pause());
+      setCurrentFrame(Math.max(0, endFrame - 1));
+      setPlaying(false);
+    }, 30);
+    return () => window.clearInterval(timer);
+  }, [fps, playing]);
 
   const registerVideo = useCallback(
     (key: string, element: HTMLVideoElement | null) => {
@@ -58,13 +72,14 @@ export function useVideoSync(length: number, fps: number) {
       const position = start / fps;
       Object.values(videos.current).forEach((video) => {
         if (!video) return;
+        video.playbackRate = rate;
         video.currentTime = position;
         void video.play();
       });
       setCurrentFrame(start);
       setPlaying(true);
     },
-    [fps, length],
+    [fps, length, rate],
   );
   const changeRate = useCallback((nextRate: number) => {
     setRate(nextRate);

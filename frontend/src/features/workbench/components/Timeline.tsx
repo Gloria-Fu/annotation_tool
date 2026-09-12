@@ -103,8 +103,6 @@ export function Timeline({
               event.stopPropagation();
               onInteractionStart();
               onSelect(segment);
-              seekAt(event.clientX);
-              seekRef.current = true;
             }}
             onClick={(event) => {
               event.stopPropagation();
@@ -146,6 +144,7 @@ export function Timeline({
           title="拖动定位播放位置"
           style={{ left: `${frameToPercent(currentFrame, length)}%` }}
           onPointerDown={(event) => {
+            event.preventDefault();
             event.stopPropagation();
             onInteractionStart();
             seekAt(event.clientX);
