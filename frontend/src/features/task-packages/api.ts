@@ -19,13 +19,14 @@ export const taskPackagesApi = {
     api<TaskPackage>(`/task-packages/${packageId}/publish`, { method: "POST" }),
   items: (packageId: string, status?: ItemStatus) =>
     api<TaskItem[]>(`/task-packages/${packageId}/items${status ? `?status=${status}` : ""}`),
-  claim: (packageId: string, review: boolean) =>
-    api<TaskItem>(
-      `/${review ? "review-tasks" : "annotation-tasks"}/claim?package_id=${packageId}`,
-      {
-        method: "POST",
-      },
-    ),
+  claim: (packageId: string, review: boolean, claimPolicy?: "sequential" | "random") => {
+    const params = new URLSearchParams({ package_id: packageId });
+    if (review && claimPolicy) params.set("claim_policy", claimPolicy);
+    return api<TaskItem>(
+      `/${review ? "review-tasks" : "annotation-tasks"}/claim?${params.toString()}`,
+      { method: "POST" },
+    );
+  },
   assign: (
     packageId: string,
     input: { item_ids: string[]; assignee_id: string; stage: "annotation" | "review" },

@@ -27,7 +27,7 @@ from app.models import (
 from app.schemas import AssignmentRequest, PackageCreate, ReclaimRequest
 
 
-def list_packages(project_id: str | None, user: User, db: Session) -> list[TaskPackage]:
+def list_packages(project_id: str | None, user: User, db: Session) -> list[dict]:
     stmt = select(TaskPackage).order_by(TaskPackage.created_at.desc())
     if project_id:
         ensure_project_access(db, user, project_id)
@@ -48,7 +48,32 @@ def list_packages(project_id: str | None, user: User, db: Session) -> list[TaskP
             TaskPackage.status == PackageStatus.PUBLISHED,
             or_(~any_restriction, is_allowed),
         )
-    return list(db.scalars(stmt).all())
+    packages = list(db.scalars(stmt).all())
+    result = []
+    for package in packages:
+        items = list(db.scalars(select(TaskItem).where(TaskItem.package_id == package.id)).all())
+        result.append(
+            {
+                **{
+                    column.name: getattr(package, column.name)
+                    for column in TaskPackage.__table__.columns
+                },
+                "total_items": len(items),
+                "claimed_items": sum(item.status != ItemStatus.AVAILABLE for item in items),
+                "annotated_items": sum(
+                    item.status
+                    in {
+                        ItemStatus.REVIEW_PENDING,
+                        ItemStatus.REVIEW_ASSIGNED,
+                        ItemStatus.REVIEWING,
+                        ItemStatus.COMPLETED,
+                    }
+                    for item in items
+                ),
+                "reviewed_items": sum(item.status == ItemStatus.COMPLETED for item in items),
+            }
+        )
+    return result
 
 
 def create_package(payload: PackageCreate, actor: User, db: Session) -> TaskPackage:
@@ -147,10 +172,22 @@ def list_items(
     return list(db.scalars(stmt.order_by(TaskItem.claim_order).limit(1000)).all())
 
 
-def claim(package_id: str, user: User, review: bool, db: Session) -> TaskItem:
+def claim(
+    package_id: str,
+    user: User,
+    review: bool,
+    db: Session,
+    claim_policy: ClaimPolicy | None = None,
+) -> TaskItem:
     package = db.get(TaskPackage, package_id)
-    if not package or package.status != PackageStatus.PUBLISHED:
-        raise HTTPException(status_code=404, detail="没有可领取的任务包")
+    stage_label = "审核" if review else "标注"
+    if not package:
+        raise HTTPException(status_code=404, detail=f"领取{stage_label}失败：任务包不存在。")
+    if package.status != PackageStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"领取{stage_label}失败：任务包尚未发布，暂不可领取。",
+        )
     ensure_project_access(db, user, package.project_id)
     allowed = (
         (Role.REVIEWER, Role.ANNOTATION_MANAGER)
@@ -158,7 +195,10 @@ def claim(package_id: str, user: User, review: bool, db: Session) -> TaskItem:
         else (Role.ANNOTATOR, Role.ANNOTATION_MANAGER)
     )
     if user.role not in allowed:
-        raise HTTPException(status_code=403, detail="当前角色不能领取此类任务")
+        raise HTTPException(
+            status_code=403,
+            detail=f"领取{stage_label}失败：当前账号角色不能领取{stage_label}任务。",
+        )
     if user.role in (Role.ANNOTATOR, Role.REVIEWER):
         has_restriction = db.scalar(
             select(func.count(TaskPackageMember.id)).where(
@@ -171,7 +211,11 @@ def claim(package_id: str, user: User, review: bool, db: Session) -> TaskItem:
                 TaskPackageMember.user_id == user.id,
             )
         ):
-            raise HTTPException(status_code=403, detail="你不在该任务包的成员范围内")
+            raise HTTPException(
+                status_code=403,
+                detail=f"领取{stage_label}失败：当前账号不在该任务包的成员范围内。",
+            )
+    effective_policy = claim_policy or package.claim_policy
     stmt = select(TaskItem).where(TaskItem.package_id == package_id)
     if review:
         stmt = stmt.where(
@@ -180,9 +224,22 @@ def claim(package_id: str, user: User, review: bool, db: Session) -> TaskItem:
         )
     else:
         stmt = stmt.where(TaskItem.status == ItemStatus.AVAILABLE)
-    item = db.scalar(stmt.order_by(TaskItem.claim_order).with_for_update(skip_locked=True).limit(1))
+    locked_stmt = stmt.with_for_update(skip_locked=True)
+    if effective_policy == ClaimPolicy.RANDOM:
+        candidates = list(db.scalars(locked_stmt.order_by(TaskItem.claim_order)).all())
+        item = random.choice(candidates) if candidates else None
+    else:
+        item = db.scalar(locked_stmt.order_by(TaskItem.claim_order).limit(1))
     if not item:
-        raise HTTPException(status_code=409, detail="暂无可领取任务")
+        if review:
+            raise HTTPException(
+                status_code=409,
+                detail="暂无可领取审核任务：任务包中没有待审核条目，或待审核条目已被其他审核员领取。",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="暂无可领取标注任务：任务包中的条目已被领取，或当前没有可领取条目。",
+        )
     try:
         if review:
             state_machine.claim_review(item, user.id)
@@ -191,7 +248,10 @@ def claim(package_id: str, user: User, review: bool, db: Session) -> TaskItem:
             state_machine.claim_annotation(item, user.id)
             stage = "annotation"
     except InvalidTransition as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=409,
+            detail=f"领取{stage_label}失败：{exc}",
+        ) from exc
     db.add(
         AssignmentHistory(
             task_item_id=item.id,
@@ -201,7 +261,15 @@ def claim(package_id: str, user: User, review: bool, db: Session) -> TaskItem:
             actor_id=user.id,
         )
     )
-    audit(db, user.id, "claim_task", "task_item", item.id, stage=stage)
+    audit(
+        db,
+        user.id,
+        "claim_task",
+        "task_item",
+        item.id,
+        stage=stage,
+        claim_policy=effective_policy.value,
+    )
     db.commit()
     return item
 

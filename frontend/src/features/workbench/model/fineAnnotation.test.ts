@@ -175,3 +175,121 @@ it("does not infer hand ownership from legacy Pick points", () => {
   expect(issues()).toContain("左手关键帧标记");
   expect(issues({ left, right })).toContain("左手关键帧标记");
 });
+
+it("renders structured Pick failure reasons without claiming success", () => {
+  const fine: FineAnnotation = {
+    ...annotation,
+    outcome: "failure",
+    template_values: {
+      operator_hand: "",
+    },
+    failure_reason_code: "gripper_deviated",
+    failure_direction: "左上方",
+    failure_detail: "物体滑落到夹爪下方",
+  };
+  const text = fineAnnotationText(fine);
+  expect(text).toContain("本次尝试失败");
+  expect(text).toContain("本次尝试失败，原因是夹爪向左上方偏移");
+  expect(text).toContain("物体滑落到夹爪下方");
+  expect(text).not.toContain("夹爪初始位于");
+  expect(text).not.toContain("夹持住物体。");
+  const issues = templateIssues({
+    id: "failed-pick",
+    start_frame: 0,
+    end_frame: 10,
+    text,
+    fine_annotation: fine,
+  });
+  expect(issues).toEqual([]);
+  expect(issues).not.toContain("操作手");
+  expect(issues).not.toContain("夹爪初始位置");
+  expect(issues).not.toContain("物体名称");
+  expect(
+    templateIssues({
+      id: "failed-pick",
+      start_frame: 0,
+      end_frame: 10,
+      text,
+      fine_annotation: { ...fine, failure_direction: "" },
+    }),
+  ).toContain("偏移方向");
+});
+
+it("renders Place failure without success-only placement fields", () => {
+  const fine: FineAnnotation = {
+    ...annotation,
+    skill: "Place",
+    outcome: "failure",
+    failure_reason_code: "object_dropped",
+    failure_detail: "物体落在目标区域外，后续状态无法确认",
+  };
+  const text = fineAnnotationText(fine);
+  expect(text).toContain("本次尝试失败，原因是物体中途掉落");
+  expect(text).toContain("物体落在目标区域外，后续状态无法确认");
+  expect(text).not.toContain("持握");
+  expect(text).not.toContain("放置在");
+  const issues = templateIssues({
+    id: "failed-place",
+    start_frame: 0,
+    end_frame: 10,
+    text,
+    fine_annotation: fine,
+  });
+  expect(issues).toEqual([]);
+  expect(issues).not.toContain("靠近目标位置");
+  expect(issues).not.toContain("放置位置");
+});
+
+it("allows an unstructured failure event with only a reason", () => {
+  const fine: FineAnnotation = {
+    ...annotation,
+    outcome: "failure",
+    failure_reason_code: "failed_to_grasp",
+  };
+  expect(fineAnnotationText(fine)).toContain("本次尝试失败，原因是未形成有效夹持");
+  expect(
+    templateIssues({
+      id: "unstructured-failure",
+      start_frame: 0,
+      end_frame: 10,
+      text: "",
+      fine_annotation: fine,
+    }),
+  ).toEqual([]);
+});
+
+it("adds retry context to generated text and requires a recovery action", () => {
+  const fine: FineAnnotation = {
+    ...annotation,
+    skill: "Pick",
+    outcome: "success",
+    recovery_action: "夹爪重新张开，右手夹爪轻微回撤",
+    target_point_id: "point1",
+    target_point_label: "茶叶罐盖子的凸点",
+    template_values: {
+      operator_hand: "右手",
+      initial_position: "失败后的当前位置",
+      initial_state: "张开",
+      object_location: "货架中央",
+      object_name: "茶叶罐",
+      reference: "罐盖凸点",
+      orientation: "平行",
+      contact_point: "凸点两侧",
+      gripper_action: "闭合",
+    },
+  };
+  const text = fineAnnotationText(fine);
+  expect(text).toContain(
+    "失败后，夹爪重新张开，右手夹爪轻微回撤，重新对准茶叶罐盖子的凸点（point1）",
+  );
+  expect(
+    templateIssues({
+      id: "retry",
+      start_frame: 10,
+      end_frame: 20,
+      text,
+      retry_of: "failed-pick",
+      fine_annotation: { ...fine, recovery_action: "" },
+    }),
+  ).toContain("恢复动作");
+});

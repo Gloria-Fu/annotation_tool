@@ -1,7 +1,17 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database import Base
@@ -41,6 +51,39 @@ class AssignmentHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class QualityBatch(Base):
+    __tablename__ = "quality_batches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    package_id: Mapped[str] = mapped_column(ForeignKey("task_packages.id"), index=True)
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    mode: Mapped[str] = mapped_column(String(16))
+    sample_percent: Mapped[int | None] = mapped_column(Integer)
+    sample_count: Mapped[int | None] = mapped_column(Integer)
+    seed: Mapped[str] = mapped_column(String(128))
+    only_unchecked: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class QualitySample(Base):
+    __tablename__ = "quality_samples"
+    __table_args__ = (UniqueConstraint("batch_id", "task_item_id", name="uq_quality_sample_item"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    batch_id: Mapped[str] = mapped_column(
+        ForeignKey("quality_batches.id", ondelete="CASCADE"), index=True
+    )
+    task_item_id: Mapped[str] = mapped_column(
+        ForeignKey("task_items.id", ondelete="CASCADE"), index=True
+    )
+    sample_order: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class QualityCheck(Base):
     __tablename__ = "quality_checks"
 
@@ -48,7 +91,15 @@ class QualityCheck(Base):
     task_item_id: Mapped[str] = mapped_column(
         ForeignKey("task_items.id", ondelete="CASCADE"), index=True
     )
+    batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("quality_batches.id", ondelete="SET NULL"), index=True
+    )
     reviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    revision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("annotation_revisions.id", ondelete="SET NULL"), index=True
+    )
+    revision_version: Mapped[int | None] = mapped_column(Integer)
+    revision_hash: Mapped[str | None] = mapped_column(String(64))
     result: Mapped[QaStatus] = mapped_column(Enum(QaStatus, native_enum=False))
     comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

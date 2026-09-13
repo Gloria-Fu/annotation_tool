@@ -2,11 +2,21 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
-from app.features.quality.service import check as quality_check
+from app.features.quality.service import (
+    check as quality_check,
+)
+from app.features.quality.service import (
+    create_batch,
+    get_batch,
+)
+from app.features.quality.service import (
+    history as quality_history,
+)
 from app.features.task_packages.service import claim
 from app.features.users.service import delete_user
 from app.features.work_items.service import (
     clear_annotations,
+    context,
     initial_segments,
     review_item,
     save_draft,
@@ -23,12 +33,14 @@ from app.models import (
     Project,
     ProjectMember,
     QaStatus,
+    QualityCheck,
+    QualitySample,
     Role,
     TaskItem,
     TaskPackage,
     User,
 )
-from app.schemas import QualityInput, ReviewInput, RevisionInput
+from app.schemas import QualityBatchCreate, QualityInput, ReviewInput, RevisionInput
 from fastapi import HTTPException
 from sqlalchemy import select
 
@@ -128,6 +140,217 @@ def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
     assert item.annotator_id == annotator.id
     assert item.reviewer_id is None
     assert sha256(source_path.read_bytes()).hexdigest() == source_hash
+
+
+def test_quality_batch_persists_sample_and_checked_revision(db, tmp_path, monkeypatch):
+    admin, annotator, reviewer, package, original = setup_item(db, tmp_path, monkeypatch)
+    item = claim(package.id, annotator, False, db)
+    item = submit_annotation(
+        item.id,
+        RevisionInput(
+            payload={
+                "segments": [{"id": "segment-1", "start_frame": 0, "end_frame": 10, "text": "pick"}]
+            }
+        ),
+        annotator,
+        db,
+    )
+    claim(package.id, reviewer, True, db)
+    review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
+
+    batch = create_batch(
+        QualityBatchCreate(package_id=package.id, mode="all", seed="traceable"),
+        admin,
+        db,
+    )
+    assert batch.total_samples == 1
+    assert batch.samples[0].task_item_id == original.id
+    assert db.scalar(select(QualitySample).where(QualitySample.batch_id == batch.id))
+
+    quality_check(
+        item.id,
+        QualityInput(result=QaStatus.PASSED, batch_id=batch.id),
+        admin,
+        db,
+    )
+    checked = db.scalar(
+        select(QualityCheck).where(
+            QualityCheck.batch_id == batch.id,
+            QualityCheck.task_item_id == item.id,
+        )
+    )
+    assert checked is not None
+    assert checked.revision_id is not None
+    assert checked.revision_version == 2
+    assert get_batch(batch.id, admin, db).status == "completed"
+    assert quality_history(item.id, admin, db)[0].batch_id == batch.id
+
+
+def test_quality_batch_manager_can_check_and_reviewer_cannot(db, tmp_path, monkeypatch):
+    admin, annotator, reviewer, package, item = setup_item(db, tmp_path, monkeypatch)
+    manager = make_user(db, "quality-manager", Role.ANNOTATION_MANAGER)
+    db.add(ProjectMember(project_id=package.project_id, user_id=manager.id))
+    db.commit()
+
+    claim(package.id, annotator, False, db)
+    submit_annotation(
+        item.id,
+        RevisionInput(
+            payload={
+                "segments": [{"id": "segment-1", "start_frame": 0, "end_frame": 10, "text": "pick"}]
+            }
+        ),
+        annotator,
+        db,
+    )
+    claim(package.id, reviewer, True, db)
+    review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
+    batch = create_batch(
+        QualityBatchCreate(
+            package_id=package.id,
+            assignee_id=manager.id,
+            mode="all",
+            seed="assigned-manager",
+        ),
+        admin,
+        db,
+    )
+
+    assert get_batch(batch.id, manager, db).id == batch.id
+    with pytest.raises(HTTPException) as forbidden:
+        get_batch(batch.id, reviewer, db)
+    assert forbidden.value.status_code == 403
+
+    quality_check(
+        item.id,
+        QualityInput(result=QaStatus.PASSED, batch_id=batch.id),
+        manager,
+        db,
+    )
+    assert get_batch(batch.id, manager, db).checked_samples == 1
+
+
+def test_reviewer_can_choose_sequential_or_random_claim_order(db, tmp_path, monkeypatch):
+    _, annotator, reviewer, package, first_item = setup_item(db, tmp_path, monkeypatch)
+    first_item.annotator_id = annotator.id
+    first_item.status = ItemStatus.REVIEW_PENDING
+    second_episode = DatasetEpisode(
+        dataset_id=package.dataset_id,
+        episode_index=1,
+        length=10,
+        data_path="data-1.parquet",
+        video_paths={},
+    )
+    third_episode = DatasetEpisode(
+        dataset_id=package.dataset_id,
+        episode_index=2,
+        length=10,
+        data_path="data-2.parquet",
+        video_paths={},
+    )
+    db.add_all([second_episode, third_episode])
+    db.flush()
+    second_item = TaskItem(
+        package_id=package.id,
+        episode_id=second_episode.id,
+        claim_order=1,
+        status=ItemStatus.REVIEW_PENDING,
+        annotator_id=annotator.id,
+    )
+    third_item = TaskItem(
+        package_id=package.id,
+        episode_id=third_episode.id,
+        claim_order=2,
+        status=ItemStatus.REVIEW_PENDING,
+        annotator_id=annotator.id,
+    )
+    db.add_all([second_item, third_item])
+    db.commit()
+
+    sequential = claim(package.id, reviewer, True, db, ClaimPolicy.SEQUENTIAL)
+    assert sequential.claim_order == 0
+
+    monkeypatch.setattr(
+        "app.features.task_packages.service.random.choice",
+        lambda candidates: candidates[-1],
+    )
+    random_item = claim(package.id, reviewer, True, db, ClaimPolicy.RANDOM)
+    assert random_item.claim_order == 2
+
+
+def test_quality_rejection_exposes_reason_and_rework_reopens_qa(db, tmp_path, monkeypatch):
+    admin, annotator, reviewer, package, item = setup_item(db, tmp_path, monkeypatch)
+    claim(package.id, annotator, False, db)
+    submit_annotation(
+        item.id,
+        RevisionInput(
+            payload={
+                "segments": [{"id": "segment-1", "start_frame": 0, "end_frame": 10, "text": "pick"}]
+            }
+        ),
+        annotator,
+        db,
+    )
+    claim(package.id, reviewer, True, db)
+    review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
+    batch = create_batch(
+        QualityBatchCreate(package_id=package.id, mode="all", seed="rework"),
+        admin,
+        db,
+    )
+    quality_check(
+        item.id,
+        QualityInput(
+            result=QaStatus.REJECTED,
+            comment="动作边界不准确",
+            batch_id=batch.id,
+        ),
+        admin,
+        db,
+    )
+    work_context = context(item.id, annotator, db)
+    assert work_context.quality_comment == "动作边界不准确"
+    assert item.qa_status == QaStatus.REJECTED
+
+    submit_annotation(
+        item.id,
+        RevisionInput(
+            payload={
+                "segments": [
+                    {"id": "segment-1", "start_frame": 0, "end_frame": 10, "text": "corrected"}
+                ]
+            }
+        ),
+        annotator,
+        db,
+    )
+    assert item.qa_status == QaStatus.UNCHECKED
+    claim(package.id, reviewer, True, db)
+    review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
+    second_batch = create_batch(
+        QualityBatchCreate(package_id=package.id, mode="all", seed="recheck"),
+        admin,
+        db,
+    )
+    assert [sample.task_item_id for sample in second_batch.samples] == [item.id]
+
+
+def test_claim_failure_explains_annotation_and_review_reasons(db, tmp_path, monkeypatch):
+    _, annotator, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+    claim(package.id, annotator, False, db)
+
+    with pytest.raises(HTTPException) as annotation_error:
+        claim(package.id, annotator, False, db)
+    assert annotation_error.value.status_code == 409
+    assert "暂无可领取标注任务" in annotation_error.value.detail
+
+
+def test_review_claim_failure_explains_review_reason(db, tmp_path, monkeypatch):
+    _, _, reviewer, package, _ = setup_item(db, tmp_path, monkeypatch)
+    with pytest.raises(HTTPException) as review_error:
+        claim(package.id, reviewer, True, db)
+    assert review_error.value.status_code == 409
+    assert "暂无可领取审核任务" in review_error.value.detail
 
 
 def test_manager_cannot_review_own_annotation(db, tmp_path, monkeypatch):

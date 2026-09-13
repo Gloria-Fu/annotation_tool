@@ -1,7 +1,7 @@
-from datetime import datetime
-from typing import Any
+from datetime import date, datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import ClaimPolicy, DatasetStatus, ItemStatus, PackageStatus, QaStatus, Role
 
@@ -110,6 +110,10 @@ class PackageOut(ORMModel):
     claim_policy: ClaimPolicy
     random_seed: int | None
     created_at: datetime
+    total_items: int = 0
+    claimed_items: int = 0
+    annotated_items: int = 0
+    reviewed_items: int = 0
 
 
 class AssignmentRequest(BaseModel):
@@ -133,10 +137,23 @@ class ReviewInput(BaseModel):
     comment: str | None = None
     payload: dict[str, Any] | None = None
 
+    @model_validator(mode="after")
+    def require_comment_for_changes(self) -> "ReviewInput":
+        if self.decision == "request_changes" and not (self.comment or "").strip():
+            raise ValueError("退回修改时必须填写审核原因")
+        return self
+
 
 class QualityInput(BaseModel):
     result: QaStatus
     comment: str | None = None
+    batch_id: str | None = None
+
+    @model_validator(mode="after")
+    def require_comment_for_rejection(self) -> "QualityInput":
+        if self.result == QaStatus.REJECTED and not (self.comment or "").strip():
+            raise ValueError("抽检退回时必须填写问题原因")
+        return self
 
 
 class TaskItemOut(ORMModel):
@@ -160,6 +177,64 @@ class WorkContext(BaseModel):
     data_url: str
     video_urls: dict[str, str]
     latest_revision: dict[str, Any] | None
+    review_comment: str | None = None
+    quality_comment: str | None = None
+
+
+class QualityBatchCreate(BaseModel):
+    package_id: str
+    assignee_id: str | None = None
+    mode: Literal["all", "ratio", "count"] = "ratio"
+    percent: int = Field(default=10, ge=1, le=100)
+    count: int = Field(default=20, ge=1)
+    seed: str = Field(default="quality", min_length=1, max_length=128)
+    only_unchecked: bool = True
+
+
+class QualityCheckOut(ORMModel):
+    id: str
+    batch_id: str | None
+    task_item_id: str
+    reviewer_id: str
+    result: QaStatus
+    comment: str | None
+    revision_id: str | None
+    revision_version: int | None
+    revision_hash: str | None
+    created_at: datetime
+
+
+class QualityBatchOut(ORMModel):
+    id: str
+    project_id: str
+    package_id: str
+    created_by_id: str
+    assignee_id: str | None
+    mode: str
+    sample_percent: int | None
+    sample_count: int | None
+    seed: str
+    only_unchecked: bool
+    status: str
+    created_at: datetime
+    completed_at: datetime | None
+    total_samples: int
+    checked_samples: int
+    passed_samples: int
+    rejected_samples: int
+
+
+class QualitySampleOut(ORMModel):
+    id: str
+    batch_id: str
+    task_item_id: str
+    sample_order: int
+    item: TaskItemOut
+    latest_check: QualityCheckOut | None = None
+
+
+class QualityBatchDetailOut(QualityBatchOut):
+    samples: list[QualitySampleOut]
 
 
 class StatsOut(BaseModel):
@@ -167,4 +242,43 @@ class StatsOut(BaseModel):
     total: int
     by_status: dict[str, int]
     completion_rate: float
+    effective_video_seconds: float
     by_person: list[dict[str, Any]]
+
+
+class WorkMetricOut(BaseModel):
+    period_start: date
+    period_end: date
+    user_id: str
+    display_name: str
+    role: Role
+    claimed_count: int
+    first_submissions: int
+    resubmissions: int
+    returned_count: int
+    final_approved_count: int
+    effective_video_seconds: float
+    average_completion_seconds: float | None
+    first_pass_rate: float
+    rework_rate: float
+    review_claimed_count: int
+    review_count: int
+    approved_count: int
+    rejected_count: int
+    review_pass_rate: float
+    review_return_rate: float
+    average_review_seconds: float | None
+
+
+class PersonalWorkStatisticsOut(BaseModel):
+    start_date: date
+    end_date: date
+    granularity: Literal["day", "week", "month"]
+    summary: WorkMetricOut
+    periods: list[WorkMetricOut]
+
+
+class PeopleWorkStatisticsOut(BaseModel):
+    start_date: date
+    end_date: date
+    people: list[WorkMetricOut]

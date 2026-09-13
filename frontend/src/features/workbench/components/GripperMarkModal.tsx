@@ -13,6 +13,7 @@ export type GripperMarkSession = {
   frame: number;
   view: string;
   hand: OperatorHand;
+  failure?: boolean;
   group?: GripperKeyframe;
   onConfirm: (group: GripperKeyframe) => void;
 };
@@ -66,7 +67,7 @@ export function GripperMarkModal({
   return (
     <Modal
       open
-      title={`关键帧精细标记 · ${handLabel(session.hand)} · HEAD · 帧 ${session.frame}`}
+      title={`${session.failure ? "失败关键帧精细标记" : "关键帧精细标记"} · ${handLabel(session.hand)} · HEAD · 帧 ${session.frame}`}
       width="min(1400px, 96vw)"
       centered
       maskClosable={false}

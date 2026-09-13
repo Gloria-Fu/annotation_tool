@@ -29,6 +29,7 @@ const { Header, Content, Sider } = Layout;
 const menuByRole: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
   developer_admin: [
     { key: "/dashboard", label: "进度看板", icon: <BarChart3 size={18} /> },
+    { key: "/work-statistics", label: "人员统计", icon: <BarChart3 size={18} /> },
     { key: "/projects", label: "项目管理", icon: <FolderKanban size={18} /> },
     { key: "/users", label: "账号管理", icon: <Users size={18} /> },
     { key: "/datasets", label: "数据导入", icon: <Database size={18} /> },
@@ -37,17 +38,22 @@ const menuByRole: Record<Role, { key: string; label: string; icon: ReactNode }[]
   ],
   annotation_manager: [
     { key: "/dashboard", label: "项目进度", icon: <BarChart3 size={18} /> },
+    { key: "/work-statistics", label: "人员统计", icon: <BarChart3 size={18} /> },
     { key: "/users", label: "人员管理", icon: <UserCog size={18} /> },
     { key: "/packages", label: "任务包", icon: <Boxes size={18} /> },
+    { key: "/quality", label: "质量抽检", icon: <ShieldCheck size={18} /> },
+    { key: "/my-work", label: "我的工作量", icon: <BarChart3 size={18} /> },
     { key: "/my-tasks", label: "我的标注", icon: <FileJson size={18} /> },
     { key: "/reviews", label: "我的审核", icon: <ClipboardCheck size={18} /> },
   ],
   reviewer: [
     { key: "/packages", label: "审核任务包", icon: <PackageCheck size={18} /> },
+    { key: "/work-statistics", label: "我的工作量", icon: <BarChart3 size={18} /> },
     { key: "/reviews", label: "我的审核", icon: <ClipboardCheck size={18} /> },
   ],
   annotator: [
     { key: "/packages", label: "标注任务包", icon: <PackageCheck size={18} /> },
+    { key: "/work-statistics", label: "我的工作量", icon: <BarChart3 size={18} /> },
     { key: "/my-tasks", label: "我的标注", icon: <FileJson size={18} /> },
   ],
 };

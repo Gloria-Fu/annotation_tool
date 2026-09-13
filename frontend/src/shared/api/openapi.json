@@ -1138,6 +1138,22 @@
             }
           },
           {
+            "name": "claim_policy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ClaimPolicy"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Claim Policy"
+            }
+          },
+          {
             "name": "annotate_session",
             "in": "cookie",
             "required": false,
@@ -1678,71 +1694,6 @@
         }
       }
     },
-    "/api/v1/work-items/{item_id}/quality-check": {
-      "post": {
-        "summary": "Quality Check",
-        "operationId": "quality_check_api_v1_work_items__item_id__quality_check_post",
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Item Id"
-            }
-          },
-          {
-            "name": "annotate_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Annotate Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/QualityInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskItemOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/work-items/{item_id}/data": {
       "get": {
         "summary": "Item Data",
@@ -1858,6 +1809,395 @@
         }
       }
     },
+    "/api/v1/quality-batches": {
+      "post": {
+        "summary": "Create Quality Batch",
+        "operationId": "create_quality_batch_api_v1_quality_batches_post",
+        "parameters": [
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualityBatchCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityBatchDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Quality Batches",
+        "operationId": "list_quality_batches_api_v1_quality_batches_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "package_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Package Id"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QualityBatchOut"
+                  },
+                  "title": "Response List Quality Batches Api V1 Quality Batches Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quality-batches/{batch_id}": {
+      "get": {
+        "summary": "Get Quality Batch",
+        "operationId": "get_quality_batch_api_v1_quality_batches__batch_id__get",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityBatchDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-items/{item_id}/quality-history": {
+      "get": {
+        "summary": "Quality History",
+        "operationId": "quality_history_api_v1_work_items__item_id__quality_history_get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QualityCheckOut"
+                  },
+                  "title": "Response Quality History Api V1 Work Items  Item Id  Quality History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-items/{item_id}/quality-check": {
+      "post": {
+        "summary": "Quality Check",
+        "operationId": "quality_check_api_v1_work_items__item_id__quality_check_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualityInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quality-batches/{batch_id}/items/{item_id}/check": {
+      "post": {
+        "summary": "Check Quality Batch Item",
+        "operationId": "check_quality_batch_item_api_v1_quality_batches__batch_id__items__item_id__check_post",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualityInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stats": {
       "get": {
         "summary": "Project Stats",
@@ -1925,6 +2265,440 @@
             "schema": {
               "type": "string",
               "title": "Project Id"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-statistics/me": {
+      "get": {
+        "summary": "Personal Work Statistics",
+        "operationId": "personal_work_statistics_api_v1_work_statistics_me_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(day|week|month)$",
+              "default": "day",
+              "title": "Granularity"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalWorkStatisticsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-statistics/people": {
+      "get": {
+        "summary": "People Work Statistics",
+        "operationId": "people_work_statistics_api_v1_work_statistics_people_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Role"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleWorkStatisticsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-statistics/me.csv": {
+      "get": {
+        "summary": "Personal Work Csv",
+        "operationId": "personal_work_csv_api_v1_work_statistics_me_csv_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(day|week|month)$",
+              "default": "day",
+              "title": "Granularity"
+            }
+          },
+          {
+            "name": "annotate_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annotate Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-statistics/people.csv": {
+      "get": {
+        "summary": "People Work Csv",
+        "operationId": "people_work_csv_api_v1_work_statistics_people_csv_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Role"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
             }
           },
           {
@@ -2362,6 +3136,26 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "total_items": {
+            "type": "integer",
+            "title": "Total Items",
+            "default": 0
+          },
+          "claimed_items": {
+            "type": "integer",
+            "title": "Claimed Items",
+            "default": 0
+          },
+          "annotated_items": {
+            "type": "integer",
+            "title": "Annotated Items",
+            "default": 0
+          },
+          "reviewed_items": {
+            "type": "integer",
+            "title": "Reviewed Items",
+            "default": 0
           }
         },
         "type": "object",
@@ -2405,6 +3199,76 @@
           "new_password"
         ],
         "title": "PasswordChange"
+      },
+      "PeopleWorkStatisticsOut": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/WorkMetricOut"
+            },
+            "type": "array",
+            "title": "People"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_date",
+          "end_date",
+          "people"
+        ],
+        "title": "PeopleWorkStatisticsOut"
+      },
+      "PersonalWorkStatisticsOut": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "day",
+              "week",
+              "month"
+            ],
+            "title": "Granularity"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/WorkMetricOut"
+          },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/WorkMetricOut"
+            },
+            "type": "array",
+            "title": "Periods"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_date",
+          "end_date",
+          "granularity",
+          "summary",
+          "periods"
+        ],
+        "title": "PersonalWorkStatisticsOut"
       },
       "ProjectCreate": {
         "properties": {
@@ -2476,6 +3340,412 @@
         ],
         "title": "QaStatus"
       },
+      "QualityBatchCreate": {
+        "properties": {
+          "package_id": {
+            "type": "string",
+            "title": "Package Id"
+          },
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "all",
+              "ratio",
+              "count"
+            ],
+            "title": "Mode",
+            "default": "ratio"
+          },
+          "percent": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Percent",
+            "default": 10
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Count",
+            "default": 20
+          },
+          "seed": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Seed",
+            "default": "quality"
+          },
+          "only_unchecked": {
+            "type": "boolean",
+            "title": "Only Unchecked",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "package_id"
+        ],
+        "title": "QualityBatchCreate"
+      },
+      "QualityBatchDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "package_id": {
+            "type": "string",
+            "title": "Package Id"
+          },
+          "created_by_id": {
+            "type": "string",
+            "title": "Created By Id"
+          },
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Id"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "sample_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Percent"
+          },
+          "sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Count"
+          },
+          "seed": {
+            "type": "string",
+            "title": "Seed"
+          },
+          "only_unchecked": {
+            "type": "boolean",
+            "title": "Only Unchecked"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "total_samples": {
+            "type": "integer",
+            "title": "Total Samples"
+          },
+          "checked_samples": {
+            "type": "integer",
+            "title": "Checked Samples"
+          },
+          "passed_samples": {
+            "type": "integer",
+            "title": "Passed Samples"
+          },
+          "rejected_samples": {
+            "type": "integer",
+            "title": "Rejected Samples"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/QualitySampleOut"
+            },
+            "type": "array",
+            "title": "Samples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "package_id",
+          "created_by_id",
+          "assignee_id",
+          "mode",
+          "sample_percent",
+          "sample_count",
+          "seed",
+          "only_unchecked",
+          "status",
+          "created_at",
+          "completed_at",
+          "total_samples",
+          "checked_samples",
+          "passed_samples",
+          "rejected_samples",
+          "samples"
+        ],
+        "title": "QualityBatchDetailOut"
+      },
+      "QualityBatchOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "package_id": {
+            "type": "string",
+            "title": "Package Id"
+          },
+          "created_by_id": {
+            "type": "string",
+            "title": "Created By Id"
+          },
+          "assignee_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Id"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "sample_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Percent"
+          },
+          "sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Count"
+          },
+          "seed": {
+            "type": "string",
+            "title": "Seed"
+          },
+          "only_unchecked": {
+            "type": "boolean",
+            "title": "Only Unchecked"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "total_samples": {
+            "type": "integer",
+            "title": "Total Samples"
+          },
+          "checked_samples": {
+            "type": "integer",
+            "title": "Checked Samples"
+          },
+          "passed_samples": {
+            "type": "integer",
+            "title": "Passed Samples"
+          },
+          "rejected_samples": {
+            "type": "integer",
+            "title": "Rejected Samples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "package_id",
+          "created_by_id",
+          "assignee_id",
+          "mode",
+          "sample_percent",
+          "sample_count",
+          "seed",
+          "only_unchecked",
+          "status",
+          "created_at",
+          "completed_at",
+          "total_samples",
+          "checked_samples",
+          "passed_samples",
+          "rejected_samples"
+        ],
+        "title": "QualityBatchOut"
+      },
+      "QualityCheckOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "task_item_id": {
+            "type": "string",
+            "title": "Task Item Id"
+          },
+          "reviewer_id": {
+            "type": "string",
+            "title": "Reviewer Id"
+          },
+          "result": {
+            "$ref": "#/components/schemas/QaStatus"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "revision_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Version"
+          },
+          "revision_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "batch_id",
+          "task_item_id",
+          "reviewer_id",
+          "result",
+          "comment",
+          "revision_id",
+          "revision_version",
+          "revision_hash",
+          "created_at"
+        ],
+        "title": "QualityCheckOut"
+      },
       "QualityInput": {
         "properties": {
           "result": {
@@ -2491,6 +3761,17 @@
               }
             ],
             "title": "Comment"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
           }
         },
         "type": "object",
@@ -2498,6 +3779,48 @@
           "result"
         ],
         "title": "QualityInput"
+      },
+      "QualitySampleOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id"
+          },
+          "task_item_id": {
+            "type": "string",
+            "title": "Task Item Id"
+          },
+          "sample_order": {
+            "type": "integer",
+            "title": "Sample Order"
+          },
+          "item": {
+            "$ref": "#/components/schemas/TaskItemOut"
+          },
+          "latest_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualityCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "batch_id",
+          "task_item_id",
+          "sample_order",
+          "item"
+        ],
+        "title": "QualitySampleOut"
       },
       "ReclaimRequest": {
         "properties": {
@@ -2611,6 +3934,10 @@
             "type": "number",
             "title": "Completion Rate"
           },
+          "effective_video_seconds": {
+            "type": "number",
+            "title": "Effective Video Seconds"
+          },
           "by_person": {
             "items": {
               "additionalProperties": true,
@@ -2626,6 +3953,7 @@
           "total",
           "by_status",
           "completion_rate",
+          "effective_video_seconds",
           "by_person"
         ],
         "title": "StatsOut"
@@ -2893,6 +4221,28 @@
               }
             ],
             "title": "Latest Revision"
+          },
+          "review_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Comment"
+          },
+          "quality_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Comment"
           }
         },
         "type": "object",
@@ -2907,6 +4257,134 @@
           "latest_revision"
         ],
         "title": "WorkContext"
+      },
+      "WorkMetricOut": {
+        "properties": {
+          "period_start": {
+            "type": "string",
+            "format": "date",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Period End"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "claimed_count": {
+            "type": "integer",
+            "title": "Claimed Count"
+          },
+          "first_submissions": {
+            "type": "integer",
+            "title": "First Submissions"
+          },
+          "resubmissions": {
+            "type": "integer",
+            "title": "Resubmissions"
+          },
+          "returned_count": {
+            "type": "integer",
+            "title": "Returned Count"
+          },
+          "final_approved_count": {
+            "type": "integer",
+            "title": "Final Approved Count"
+          },
+          "effective_video_seconds": {
+            "type": "number",
+            "title": "Effective Video Seconds"
+          },
+          "average_completion_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Completion Seconds"
+          },
+          "first_pass_rate": {
+            "type": "number",
+            "title": "First Pass Rate"
+          },
+          "rework_rate": {
+            "type": "number",
+            "title": "Rework Rate"
+          },
+          "review_claimed_count": {
+            "type": "integer",
+            "title": "Review Claimed Count"
+          },
+          "review_count": {
+            "type": "integer",
+            "title": "Review Count"
+          },
+          "approved_count": {
+            "type": "integer",
+            "title": "Approved Count"
+          },
+          "rejected_count": {
+            "type": "integer",
+            "title": "Rejected Count"
+          },
+          "review_pass_rate": {
+            "type": "number",
+            "title": "Review Pass Rate"
+          },
+          "review_return_rate": {
+            "type": "number",
+            "title": "Review Return Rate"
+          },
+          "average_review_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Review Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period_start",
+          "period_end",
+          "user_id",
+          "display_name",
+          "role",
+          "claimed_count",
+          "first_submissions",
+          "resubmissions",
+          "returned_count",
+          "final_approved_count",
+          "effective_video_seconds",
+          "average_completion_seconds",
+          "first_pass_rate",
+          "rework_rate",
+          "review_claimed_count",
+          "review_count",
+          "approved_count",
+          "rejected_count",
+          "review_pass_rate",
+          "review_return_rate",
+          "average_review_seconds"
+        ],
+        "title": "WorkMetricOut"
       }
     }
   }

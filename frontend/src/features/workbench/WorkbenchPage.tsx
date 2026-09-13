@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal, Typography, message } from "antd";
+import { ArrowLeft } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
 import type { FineAnnotation, Segment, WorkContext } from "../../shared/api/types";
@@ -121,10 +122,16 @@ export function WorkbenchPage() {
     onError: (error: Error) => message.error(error.message),
   });
   const review = useMutation({
-    mutationFn: (decision: "approve" | "request_changes") =>
+    mutationFn: ({
+      decision,
+      comment,
+    }: {
+      decision: "approve" | "request_changes";
+      comment?: string;
+    }) =>
       workbenchApi.review(itemId, {
         decision,
-        comment: decision === "approve" ? undefined : "请修改标注",
+        comment,
         payload: { schema_version: "segments.v1", segments: state.segments },
       }),
     onSuccess: () => {
@@ -204,6 +211,38 @@ export function WorkbenchPage() {
     },
     [selected, state.segments, videoSync],
   );
+  const navigateFromToolbar = useCallback(
+    (direction: "previous" | "next") => navigateSegment(direction),
+    [navigateSegment],
+  );
+  const mergeSelected = useCallback(
+    (direction: "previous" | "next") => {
+      if (!selected) return;
+      const index = state.segments.findIndex((segment) => segment.id === selected.id);
+      if (
+        index < 0 ||
+        (direction === "previous" ? index === 0 : index === state.segments.length - 1)
+      )
+        return;
+      dispatch({ type: "merge", id: selected.id, direction });
+      setDirty(true);
+    },
+    [selected, state.segments],
+  );
+  const canCreateRetry =
+    !!selected &&
+    currentFineAnnotation(selected).outcome === "failure" &&
+    videoSync.currentFrame >= selected.start_frame &&
+    videoSync.currentFrame < selected.end_frame - 1;
+  const createRetry = useCallback(() => {
+    if (!selected || !canCreateRetry) return;
+    const newId = `${selected.id}-retry-${Date.now()}`;
+    const boundary = videoSync.currentFrame + 1;
+    dispatch({ type: "create-retry", id: selected.id, frame: videoSync.currentFrame, newId });
+    setSelectedId(newId);
+    setDirty(true);
+    videoSync.playSegment(boundary, selected.end_frame);
+  }, [canCreateRetry, selected, videoSync]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -233,6 +272,17 @@ export function WorkbenchPage() {
       <PageHeading
         title={`Episode ${context.episode_index}`}
         subtitle={`${context.length} 帧 · ${(context.length / fps).toFixed(2)} 秒 · ${context.tasks.join(" / ")}`}
+        leading={
+          <button
+            type="button"
+            className="workbench-back-button"
+            aria-label="返回上一个页面"
+            title="返回上一个页面"
+            onClick={() => void navigate(-1)}
+          >
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
+        }
         action={
           <Typography.Text
             type={autosave.saveState.startsWith("保存失败") ? "danger" : "secondary"}
@@ -246,8 +296,6 @@ export function WorkbenchPage() {
           <MultiViewPlayer
             context={context}
             registerVideo={videoSync.registerVideo}
-            playAll={videoSync.playAll}
-            pauseAll={videoSync.pauseAll}
             changeRate={videoSync.changeRate}
             onFrameChange={videoSync.syncFrame}
             pointMarking={pointMarking}
@@ -287,6 +335,17 @@ export function WorkbenchPage() {
               setDirty(true);
             }}
             onSeek={videoSync.syncFrame}
+            onPreviousSegment={() => navigateFromToolbar("previous")}
+            onNextSegment={() => navigateFromToolbar("next")}
+            onMerge={mergeSelected}
+            canMergePrevious={
+              !!selected && state.segments.findIndex((segment) => segment.id === selected.id) > 0
+            }
+            canMergeNext={
+              !!selected &&
+              state.segments.findIndex((segment) => segment.id === selected.id) <
+                state.segments.length - 1
+            }
           />
           <Timeline
             segments={state.segments}
@@ -337,6 +396,7 @@ export function WorkbenchPage() {
                 frame,
                 view,
                 hand,
+                failure: currentFineAnnotation(selected).outcome === "failure",
                 group: selected.fine_annotation?.gripper_keyframes?.[hand],
                 onConfirm,
               });
@@ -361,12 +421,16 @@ export function WorkbenchPage() {
           onFineChange={onFineChange}
           onConfirm={() => selected && dispatch({ type: "confirm", id: selected.id })}
           onNavigate={navigateSegment}
+          onCreateRetry={createRetry}
           onSave={() => saveDraft.mutate()}
           onSubmit={() => submit.mutate()}
-          onReview={(decision) => review.mutate(decision)}
+          onReview={(decision, comment) => review.mutate({ decision, comment })}
           isSaving={saveDraft.isPending || autosave.isSaving}
           isSubmitting={submit.isPending || review.isPending}
           canSubmit={!submitDisabled}
+          canCreateRetry={canCreateRetry}
+          reviewReason={context.review_comment}
+          qualityReason={context.quality_comment}
         />
       </div>
       {gripperSession && (

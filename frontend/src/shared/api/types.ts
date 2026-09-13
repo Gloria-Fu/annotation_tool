@@ -4,7 +4,12 @@ export type Role = components["schemas"]["Role"];
 export type User = components["schemas"]["UserOut"];
 export type Project = components["schemas"]["ProjectOut"];
 export type Dataset = components["schemas"]["DatasetOut"];
-export type TaskPackage = components["schemas"]["PackageOut"];
+export type TaskPackage = components["schemas"]["PackageOut"] & {
+  total_items: number;
+  claimed_items: number;
+  annotated_items: number;
+  reviewed_items: number;
+};
 export type TaskItem = components["schemas"]["TaskItemOut"];
 export type ClaimPolicy = components["schemas"]["ClaimPolicy"];
 export type ItemStatus = components["schemas"]["ItemStatus"];
@@ -17,6 +22,8 @@ export type Segment = {
   original_text?: string;
   source?: string;
   skill?: string | null;
+  attempt_group_id?: string;
+  retry_of?: string;
   fine_annotation?: FineAnnotation;
   annotation_status?: "unannotated" | "in_progress" | "confirmed";
 };
@@ -40,6 +47,9 @@ export type FineStage = {
 export type KeyframePoint = { frame: number; view: string; x: number; y: number };
 export type OperatorHand = "left" | "right";
 export type JawMark = { visibility: "visible"; x: number; y: number } | { visibility: "invisible" };
+export type AnnotationOutcome = "pending" | "success" | "failure";
+export type FailureReasonCode =
+  "gripper_closed_early" | "gripper_deviated" | "object_dropped" | "failed_to_grasp" | "other";
 export type GripperKeyframe = {
   frame: number;
   view: string;
@@ -51,6 +61,13 @@ export type FineAnnotation = {
   template_values?: Record<string, string>;
   skill?: string;
   operator_hand?: "左手" | "右手" | "双手" | "";
+  outcome: AnnotationOutcome;
+  failure_reason_code?: FailureReasonCode;
+  failure_direction?: string;
+  failure_detail?: string;
+  recovery_action?: string;
+  target_point_id?: string;
+  target_point_label?: string;
   object_name: string;
   object_color: string;
   object_material: string;
@@ -61,7 +78,6 @@ export type FineAnnotation = {
   keyframe_point?: KeyframePoint;
   keyframe_points?: { left?: KeyframePoint; right?: KeyframePoint };
   gripper_keyframes?: Partial<Record<OperatorHand, GripperKeyframe>>;
-  outcome: "success" | "failure";
   end_condition: string;
   actions: FineAction[];
   template?: "push_pull" | "custom";
@@ -86,5 +102,14 @@ export type RevisionSnapshot = {
 };
 export type WorkContext = Omit<components["schemas"]["WorkContext"], "latest_revision"> & {
   latest_revision: RevisionSnapshot | null;
+  review_comment?: string | null;
+  quality_comment?: string | null;
 };
 export type Stats = components["schemas"]["StatsOut"];
+export type WorkMetric = components["schemas"]["WorkMetricOut"];
+export type PersonalWorkStatistics = components["schemas"]["PersonalWorkStatisticsOut"];
+export type PeopleWorkStatistics = components["schemas"]["PeopleWorkStatisticsOut"];
+export type QualityBatch = components["schemas"]["QualityBatchOut"];
+export type QualityBatchDetail = components["schemas"]["QualityBatchDetailOut"];
+export type QualitySample = components["schemas"]["QualitySampleOut"];
+export type QualityCheck = components["schemas"]["QualityCheckOut"];

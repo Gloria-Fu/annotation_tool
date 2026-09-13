@@ -6,6 +6,15 @@ import { useShell } from "../../app/shellContext";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { queryKeys } from "../../shared/queryKeys";
 
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)} 秒`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours} 小时 ${remainingMinutes} 分钟` : `${hours} 小时`;
+}
+
 export function DashboardPage() {
   const { projectId } = useShell();
   const { data, isLoading } = useQuery({
@@ -49,6 +58,10 @@ export function DashboardPage() {
           <div className="metric-label">完成率</div>
           <div className="metric-value">{Math.round((data?.completion_rate || 0) * 100)}%</div>
         </div>
+        <div className="metric">
+          <div className="metric-label">已完成去重有效视频时长</div>
+          <div className="metric-value">{formatDuration(data?.effective_video_seconds || 0)}</div>
+        </div>
       </div>
       <div className="table-panel">
         <Table
@@ -58,6 +71,11 @@ export function DashboardPage() {
           columns={[
             { title: "人员", dataIndex: "display_name" },
             { title: "完成条目", dataIndex: "completed" },
+            {
+              title: "已完成去重有效视频时长",
+              dataIndex: "effective_video_seconds",
+              render: (value: number) => formatDuration(value),
+            },
           ]}
         />
       </div>

@@ -3,7 +3,9 @@ from app.models.annotations import (
     AnnotationRevision,
     AssignmentHistory,
     AuditLog,
+    QualityBatch,
     QualityCheck,
+    QualitySample,
     audit,
 )
 from app.models.common import (
@@ -35,6 +37,8 @@ __all__ = [
     "ProjectMember",
     "QaStatus",
     "QualityCheck",
+    "QualityBatch",
+    "QualitySample",
     "Role",
     "TaskItem",
     "TaskPackage",

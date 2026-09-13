@@ -434,23 +434,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/work-items/{item_id}/quality-check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Quality Check */
-        post: operations["quality_check_api_v1_work_items__item_id__quality_check_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/work-items/{item_id}/data": {
         parameters: {
             query?: never;
@@ -485,6 +468,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quality-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Quality Batches */
+        get: operations["list_quality_batches_api_v1_quality_batches_get"];
+        put?: never;
+        /** Create Quality Batch */
+        post: operations["create_quality_batch_api_v1_quality_batches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quality-batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Quality Batch */
+        get: operations["get_quality_batch_api_v1_quality_batches__batch_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-items/{item_id}/quality-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Quality History */
+        get: operations["quality_history_api_v1_work_items__item_id__quality_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-items/{item_id}/quality-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Quality Check */
+        post: operations["quality_check_api_v1_work_items__item_id__quality_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quality-batches/{batch_id}/items/{item_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Quality Batch Item */
+        post: operations["check_quality_batch_item_api_v1_quality_batches__batch_id__items__item_id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats": {
         parameters: {
             query?: never;
@@ -511,6 +580,74 @@ export interface paths {
         };
         /** Task Report */
         get: operations["task_report_api_v1_reports_tasks_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-statistics/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Personal Work Statistics */
+        get: operations["personal_work_statistics_api_v1_work_statistics_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-statistics/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** People Work Statistics */
+        get: operations["people_work_statistics_api_v1_work_statistics_people_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-statistics/me.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Personal Work Csv */
+        get: operations["personal_work_csv_api_v1_work_statistics_me_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work-statistics/people.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** People Work Csv */
+        get: operations["people_work_csv_api_v1_work_statistics_people_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -658,6 +795,26 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Total Items
+             * @default 0
+             */
+            total_items: number;
+            /**
+             * Claimed Items
+             * @default 0
+             */
+            claimed_items: number;
+            /**
+             * Annotated Items
+             * @default 0
+             */
+            annotated_items: number;
+            /**
+             * Reviewed Items
+             * @default 0
+             */
+            reviewed_items: number;
         };
         /**
          * PackageStatus
@@ -670,6 +827,42 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** PeopleWorkStatisticsOut */
+        PeopleWorkStatisticsOut: {
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** People */
+            people: components["schemas"]["WorkMetricOut"][];
+        };
+        /** PersonalWorkStatisticsOut */
+        PersonalWorkStatisticsOut: {
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Granularity
+             * @enum {string}
+             */
+            granularity: "day" | "week" | "month";
+            summary: components["schemas"]["WorkMetricOut"];
+            /** Periods */
+            periods: components["schemas"]["WorkMetricOut"][];
         };
         /** ProjectCreate */
         ProjectCreate: {
@@ -694,11 +887,166 @@ export interface components {
          * @enum {string}
          */
         QaStatus: "unchecked" | "passed" | "rejected";
+        /** QualityBatchCreate */
+        QualityBatchCreate: {
+            /** Package Id */
+            package_id: string;
+            /** Assignee Id */
+            assignee_id?: string | null;
+            /**
+             * Mode
+             * @default ratio
+             * @enum {string}
+             */
+            mode: "all" | "ratio" | "count";
+            /**
+             * Percent
+             * @default 10
+             */
+            percent: number;
+            /**
+             * Count
+             * @default 20
+             */
+            count: number;
+            /**
+             * Seed
+             * @default quality
+             */
+            seed: string;
+            /**
+             * Only Unchecked
+             * @default true
+             */
+            only_unchecked: boolean;
+        };
+        /** QualityBatchDetailOut */
+        QualityBatchDetailOut: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Package Id */
+            package_id: string;
+            /** Created By Id */
+            created_by_id: string;
+            /** Assignee Id */
+            assignee_id: string | null;
+            /** Mode */
+            mode: string;
+            /** Sample Percent */
+            sample_percent: number | null;
+            /** Sample Count */
+            sample_count: number | null;
+            /** Seed */
+            seed: string;
+            /** Only Unchecked */
+            only_unchecked: boolean;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Total Samples */
+            total_samples: number;
+            /** Checked Samples */
+            checked_samples: number;
+            /** Passed Samples */
+            passed_samples: number;
+            /** Rejected Samples */
+            rejected_samples: number;
+            /** Samples */
+            samples: components["schemas"]["QualitySampleOut"][];
+        };
+        /** QualityBatchOut */
+        QualityBatchOut: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Package Id */
+            package_id: string;
+            /** Created By Id */
+            created_by_id: string;
+            /** Assignee Id */
+            assignee_id: string | null;
+            /** Mode */
+            mode: string;
+            /** Sample Percent */
+            sample_percent: number | null;
+            /** Sample Count */
+            sample_count: number | null;
+            /** Seed */
+            seed: string;
+            /** Only Unchecked */
+            only_unchecked: boolean;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Total Samples */
+            total_samples: number;
+            /** Checked Samples */
+            checked_samples: number;
+            /** Passed Samples */
+            passed_samples: number;
+            /** Rejected Samples */
+            rejected_samples: number;
+        };
+        /** QualityCheckOut */
+        QualityCheckOut: {
+            /** Id */
+            id: string;
+            /** Batch Id */
+            batch_id: string | null;
+            /** Task Item Id */
+            task_item_id: string;
+            /** Reviewer Id */
+            reviewer_id: string;
+            result: components["schemas"]["QaStatus"];
+            /** Comment */
+            comment: string | null;
+            /** Revision Id */
+            revision_id: string | null;
+            /** Revision Version */
+            revision_version: number | null;
+            /** Revision Hash */
+            revision_hash: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** QualityInput */
         QualityInput: {
             result: components["schemas"]["QaStatus"];
             /** Comment */
             comment?: string | null;
+            /** Batch Id */
+            batch_id?: string | null;
+        };
+        /** QualitySampleOut */
+        QualitySampleOut: {
+            /** Id */
+            id: string;
+            /** Batch Id */
+            batch_id: string;
+            /** Task Item Id */
+            task_item_id: string;
+            /** Sample Order */
+            sample_order: number;
+            item: components["schemas"]["TaskItemOut"];
+            latest_check?: components["schemas"]["QualityCheckOut"] | null;
         };
         /** ReclaimRequest */
         ReclaimRequest: {
@@ -747,6 +1095,8 @@ export interface components {
             };
             /** Completion Rate */
             completion_rate: number;
+            /** Effective Video Seconds */
+            effective_video_seconds: number;
             /** By Person */
             by_person: {
                 [key: string]: unknown;
@@ -842,6 +1192,60 @@ export interface components {
             latest_revision: {
                 [key: string]: unknown;
             } | null;
+            /** Review Comment */
+            review_comment?: string | null;
+            /** Quality Comment */
+            quality_comment?: string | null;
+        };
+        /** WorkMetricOut */
+        WorkMetricOut: {
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /** User Id */
+            user_id: string;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+            /** Claimed Count */
+            claimed_count: number;
+            /** First Submissions */
+            first_submissions: number;
+            /** Resubmissions */
+            resubmissions: number;
+            /** Returned Count */
+            returned_count: number;
+            /** Final Approved Count */
+            final_approved_count: number;
+            /** Effective Video Seconds */
+            effective_video_seconds: number;
+            /** Average Completion Seconds */
+            average_completion_seconds: number | null;
+            /** First Pass Rate */
+            first_pass_rate: number;
+            /** Rework Rate */
+            rework_rate: number;
+            /** Review Claimed Count */
+            review_claimed_count: number;
+            /** Review Count */
+            review_count: number;
+            /** Approved Count */
+            approved_count: number;
+            /** Rejected Count */
+            rejected_count: number;
+            /** Review Pass Rate */
+            review_pass_rate: number;
+            /** Review Return Rate */
+            review_return_rate: number;
+            /** Average Review Seconds */
+            average_review_seconds: number | null;
         };
     };
     responses: never;
@@ -1546,6 +1950,7 @@ export interface operations {
         parameters: {
             query: {
                 package_id: string;
+                claim_policy?: components["schemas"]["ClaimPolicy"] | null;
             };
             header?: never;
             path?: never;
@@ -1859,43 +2264,6 @@ export interface operations {
             };
         };
     };
-    quality_check_api_v1_work_items__item_id__quality_check_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: {
-                annotate_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QualityInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaskItemOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     item_data_api_v1_work_items__item_id__data_get: {
         parameters: {
             query?: never;
@@ -1963,6 +2331,216 @@ export interface operations {
             };
         };
     };
+    list_quality_batches_api_v1_quality_batches_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                package_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityBatchOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_quality_batch_api_v1_quality_batches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QualityBatchCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityBatchDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quality_batch_api_v1_quality_batches__batch_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityBatchDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quality_history_api_v1_work_items__item_id__quality_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityCheckOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quality_check_api_v1_work_items__item_id__quality_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QualityInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_quality_batch_item_api_v1_quality_batches__batch_id__items__item_id__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+                item_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QualityInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     project_stats_api_v1_stats_get: {
         parameters: {
             query: {
@@ -2000,6 +2578,150 @@ export interface operations {
         parameters: {
             query: {
                 project_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    personal_work_statistics_api_v1_work_statistics_me_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                start_date?: string | null;
+                end_date?: string | null;
+                granularity?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalWorkStatisticsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    people_work_statistics_api_v1_work_statistics_people_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                start_date?: string | null;
+                end_date?: string | null;
+                role?: components["schemas"]["Role"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeopleWorkStatisticsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    personal_work_csv_api_v1_work_statistics_me_csv_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                start_date?: string | null;
+                end_date?: string | null;
+                granularity?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    people_work_csv_api_v1_work_statistics_people_csv_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                start_date?: string | null;
+                end_date?: string | null;
+                role?: components["schemas"]["Role"] | null;
             };
             header?: never;
             path?: never;

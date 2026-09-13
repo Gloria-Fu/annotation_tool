@@ -42,6 +42,15 @@ export function Timeline({
   };
 
   useEffect(() => {
+    if (selectedId) {
+      const selectedElement = timelineRef.current?.querySelector<HTMLElement>(
+        `[data-segment-id="${selectedId}"]`,
+      );
+      selectedElement?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
     const move = (event: PointerEvent) => {
       if (!timelineRef.current) return;
       const rect = timelineRef.current.getBoundingClientRect();
@@ -68,7 +77,7 @@ export function Timeline({
       <div
         className="timeline-track"
         ref={timelineRef}
-        style={{ width: `${zoom * 100}%` }}
+        style={{ width: `${Math.max(zoom * 100, 100)}%` }}
         onPointerDown={(event) => {
           const target = event.target;
           if (
@@ -88,11 +97,19 @@ export function Timeline({
         <div
           className="timeline-playhead"
           style={{ left: `${frameToPercent(currentFrame, length)}%` }}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onInteractionStart();
+            seekAt(event.clientX);
+            seekRef.current = true;
+          }}
         />
         {segments.map((segment, index) => (
           <div
             key={segment.id}
-            className={`timeline-segment ${segment.id === selectedId ? "active" : ""}`}
+            data-segment-id={segment.id}
+            className={`timeline-segment outcome-${currentFineAnnotation(segment).outcome} ${segment.id === selectedId ? "active" : ""}`}
             style={{
               left: `${frameToPercent(segment.start_frame, length)}%`,
               width: `${frameToPercent(segment.end_frame - segment.start_frame, length)}%`,
@@ -114,7 +131,15 @@ export function Timeline({
                 const fine = currentFineAnnotation(segment);
                 const skill = fine.skill || segment.skill || "";
                 const definition = getSkillDefinition(skill);
-                return definition ? `${definition.label} (${definition.name})` : "未选择 Skill";
+                const outcome =
+                  fine.outcome === "failure"
+                    ? "失败"
+                    : fine.outcome === "success"
+                      ? "成功"
+                      : "待判定";
+                return definition
+                  ? `${definition.label} (${definition.name}) · ${outcome}`
+                  : "未选择 Skill";
               })()}
             </span>
             {index > 0 && (

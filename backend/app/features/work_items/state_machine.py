@@ -56,6 +56,7 @@ def submit_annotation(
         raise InvalidTransition("task is assigned to another annotator")
     item.status = ItemStatus.REVIEW_PENDING
     item.reviewer_id = None
+    item.qa_status = QaStatus.UNCHECKED
     item.submitted_at = submitted_at or utcnow()
 
 

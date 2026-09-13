@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import current_user
 from app.database import get_db
-from app.features.quality.router import router as quality_router
 from app.features.work_items import service
 from app.models import TaskItem, User
 from app.schemas import ReviewInput, RevisionInput, TaskItemOut, WorkContext
@@ -54,9 +53,6 @@ def clear_annotations(
     item_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> TaskItem:
     return service.clear_annotations(item_id, user, db)
-
-
-router.include_router(quality_router)
 
 
 @router.get("/api/v1/work-items/{item_id}/data")

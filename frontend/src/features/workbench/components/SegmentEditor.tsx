@@ -1,6 +1,8 @@
 import { Crosshair, RotateCcw } from "lucide-react";
-import { Button, Input, Select, Space, Tag, Typography } from "antd";
+import { Button, Input, Modal, Segmented, Select, Space, Tag, Typography } from "antd";
+import { useState } from "react";
 import type {
+  AnnotationOutcome,
   FineAnnotation,
   Segment,
   GripperKeyframe,
@@ -11,6 +13,7 @@ import { durationSeconds, formatFrameTime } from "../model/timelineMath";
 import { currentFineAnnotation, fineAnnotationText, templateIssues } from "../model/fineAnnotation";
 import { getSkillDefinition, sentenceTokens } from "../skillDefinitions";
 import { isSkillEnabled, SKILL_OPTIONS } from "../skillAvailability";
+import { FAILURE_REASON_OPTIONS, failureReasonLabel } from "../failureReasons";
 
 export function SegmentEditor({
   selected,
@@ -26,9 +29,13 @@ export function SegmentEditor({
   onReview,
   onConfirm,
   onNavigate,
+  onCreateRetry,
   isSaving,
   isSubmitting,
   canSubmit,
+  canCreateRetry,
+  reviewReason,
+  qualityReason,
 }: {
   selected?: Segment;
   reviewing: boolean;
@@ -42,13 +49,19 @@ export function SegmentEditor({
   onFineChange: (fine: FineAnnotation, text: string) => void;
   onSave: () => void;
   onSubmit: () => void;
-  onReview: (decision: "approve" | "request_changes") => void;
+  onReview: (decision: "approve" | "request_changes", comment?: string) => void;
   onConfirm: () => void;
   onNavigate: (direction: "previous" | "replay" | "next") => void;
+  onCreateRetry: () => void;
   isSaving: boolean;
   isSubmitting: boolean;
   canSubmit: boolean;
+  canCreateRetry: boolean;
+  reviewReason?: string | null;
+  qualityReason?: string | null;
 }) {
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
   if (!selected)
     return (
       <aside className="segment-editor">
@@ -72,6 +85,41 @@ export function SegmentEditor({
       template_version: 1,
       template_values: { ...values, [key]: value },
     });
+  const isPickOrPlace = definition?.name === "Pick" || definition?.name === "Place";
+  const updateOutcome = (outcome: AnnotationOutcome) =>
+    update(
+      outcome === "failure"
+        ? { outcome }
+        : {
+            outcome,
+            failure_reason: "",
+            failure_reason_code: undefined,
+            failure_direction: undefined,
+            failure_detail: undefined,
+          },
+    );
+  const updateFailureReason = (
+    failure_reason_code: (typeof FAILURE_REASON_OPTIONS)[number]["value"],
+  ) => {
+    const failure_direction =
+      failure_reason_code === "gripper_deviated" ? fine.failure_direction : undefined;
+    const failure_detail = failure_reason_code === "other" ? fine.failure_detail : undefined;
+    update({
+      outcome: "failure",
+      failure_reason_code,
+      failure_direction,
+      failure_detail,
+      failure_reason: failureReasonLabel(failure_reason_code, failure_direction, failure_detail),
+    });
+  };
+  const keyframeDefinitionText =
+    fine.outcome === "failure" && isPickOrPlace
+      ? "本次尝试确认失败的 HEAD 画面"
+      : definition?.keyframeDefinition;
+  const requiredObjectsText =
+    fine.outcome === "failure" && isPickOrPlace
+      ? "可选：本次失败帧中操作手夹爪的左夹和右夹位置；看不见的夹指标为不可见"
+      : definition?.requiredObjects.join("、");
   const beginPointMark = () => onBeginPointMark((keyframe_point) => update({ keyframe_point }));
   return (
     <aside className="segment-editor">
@@ -110,6 +158,14 @@ export function SegmentEditor({
           </Space>
         </div>
         <div className="fine-preview">{fineAnnotationText(fine)}</div>
+        {reviewReason && !reviewing && (
+          <Typography.Paragraph type="danger">审核退回原因：{reviewReason}</Typography.Paragraph>
+        )}
+        {qualityReason && !reviewing && (
+          <Typography.Paragraph type="danger">
+            质量抽检退回原因：{qualityReason}
+          </Typography.Paragraph>
+        )}
         {issues.length > 0 && (
           <Typography.Paragraph type="warning">待填写：{issues.join("、")}</Typography.Paragraph>
         )}
@@ -143,7 +199,114 @@ export function SegmentEditor({
             {fine.skill || selected.skill ? "该 Skill 暂未开放，请选择其他技能" : "请选择技能"}
           </Typography.Text>
         )}
-        {definition && (
+        {isPickOrPlace && (
+          <section className={`attempt-outcome outcome-${fine.outcome}`} aria-label="本次尝试结果">
+            <div className="attempt-outcome-heading">
+              <Typography.Text strong>本次尝试结果</Typography.Text>
+              <Segmented
+                value={fine.outcome}
+                disabled={!enabled}
+                options={[
+                  { value: "pending", label: "待判定" },
+                  { value: "success", label: "成功" },
+                  { value: "failure", label: "失败" },
+                ]}
+                onChange={(value) => {
+                  if (value === "pending" || value === "success" || value === "failure")
+                    updateOutcome(value);
+                }}
+              />
+            </div>
+          </section>
+        )}
+        {fine.outcome === "failure" && isPickOrPlace && (
+          <section className="failure-event-panel" aria-label="失败事件面板">
+            <div className="failure-event-heading">
+              <Typography.Text strong>失败事件记录</Typography.Text>
+              <Typography.Text type="secondary">
+                失败后的复杂状态不需要套入成功句式，直接按画面记录即可。
+              </Typography.Text>
+            </div>
+            <div className="failure-fields">
+              <label className="sentence-field">
+                <span>失败原因 *</span>
+                <Select
+                  disabled={!enabled}
+                  aria-label="失败原因"
+                  value={fine.failure_reason_code}
+                  placeholder="选择失败原因"
+                  options={FAILURE_REASON_OPTIONS}
+                  onChange={updateFailureReason}
+                />
+              </label>
+              {fine.failure_reason_code === "gripper_deviated" && (
+                <label className="sentence-field">
+                  <span>偏移方向 *</span>
+                  <Input
+                    disabled={!enabled}
+                    aria-label="偏移方向"
+                    value={fine.failure_direction || ""}
+                    placeholder="如：左上方"
+                    onChange={(event) => {
+                      const failure_direction = event.target.value;
+                      update({
+                        outcome: "failure",
+                        failure_direction,
+                        failure_reason: failureReasonLabel(
+                          fine.failure_reason_code,
+                          failure_direction,
+                          fine.failure_detail,
+                        ),
+                      });
+                    }}
+                  />
+                </label>
+              )}
+              {fine.failure_reason_code === "other" ? (
+                <label className="sentence-field failure-detail-field">
+                  <span>失败情况说明 *</span>
+                  <Input.TextArea
+                    disabled={!enabled}
+                    aria-label="失败情况说明"
+                    value={fine.failure_detail || ""}
+                    placeholder="描述本次失败以及失败后的状态"
+                    rows={3}
+                    onChange={(event) => {
+                      const failure_detail = event.target.value;
+                      update({
+                        outcome: "failure",
+                        failure_detail,
+                        failure_reason: failureReasonLabel(
+                          fine.failure_reason_code,
+                          fine.failure_direction,
+                          failure_detail,
+                        ),
+                      });
+                    }}
+                  />
+                </label>
+              ) : (
+                <label className="sentence-field failure-detail-field">
+                  <span>失败后状态 / 现场说明（选填）</span>
+                  <Input.TextArea
+                    disabled={!enabled}
+                    aria-label="失败后状态 / 现场说明"
+                    value={fine.failure_detail || ""}
+                    placeholder="如：物体掉落到夹爪下方，夹爪保持闭合"
+                    rows={3}
+                    onChange={(event) =>
+                      update({
+                        outcome: "failure",
+                        failure_detail: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+              )}
+            </div>
+          </section>
+        )}
+        {fine.outcome !== "failure" && definition && (
           <div className="sentence-editor" aria-label="标注句编辑器">
             <div className="skill-sentence">
               {sentenceTokens(definition.name, values).map((token, index) =>
@@ -192,21 +355,40 @@ export function SegmentEditor({
             )}
           </div>
         )}
-        {definition && (
+        {definition && fine.outcome !== "failure" && (
           <div className="skill-guidance">
             <div>
               <Typography.Text type="secondary">关键帧定义</Typography.Text>
-              <p>{definition.keyframeDefinition}</p>
+              <p>{keyframeDefinitionText}</p>
             </div>
             <div>
               <Typography.Text type="secondary">需要标记</Typography.Text>
-              <p>{definition.requiredObjects.join("、")}</p>
+              <p>{requiredObjectsText}</p>
+            </div>
+          </div>
+        )}
+        {definition && fine.outcome === "failure" && (
+          <div className="skill-guidance failure-keyframe-guidance">
+            <div>
+              <Typography.Text type="secondary">失败关键帧（选填）</Typography.Text>
+              <p>{keyframeDefinitionText}</p>
+            </div>
+            <div>
+              <Typography.Text type="secondary">需要标记</Typography.Text>
+              <p>{requiredObjectsText}</p>
             </div>
           </div>
         )}
         {definition?.name === "Pick" || definition?.name === "Place" ? (
           <div>
-            <Typography.Text strong>关键帧位置</Typography.Text>
+            <Typography.Text strong>
+              {fine.outcome === "failure" ? "失败关键帧（选填）" : "关键帧位置"}
+            </Typography.Text>
+            {fine.outcome === "failure" && (
+              <Typography.Text type="secondary">
+                能确认时记录失败的 HEAD 帧；无法确认时可留空
+              </Typography.Text>
+            )}
             {annotationHands(fine).length === 0 && (
               <Typography.Text type="secondary">请先选择操作手</Typography.Text>
             )}
@@ -282,6 +464,42 @@ export function SegmentEditor({
             </Button>
           </div>
         )}
+        {selected.retry_of && (
+          <section className="retry-context" aria-label="重试信息">
+            <Typography.Text strong>重试信息</Typography.Text>
+            <Typography.Text type="secondary">本片段从上一段失败后的状态开始。</Typography.Text>
+            <label className="sentence-field">
+              <span>恢复动作 *</span>
+              <Input
+                disabled={!enabled}
+                aria-label="恢复动作"
+                value={fine.recovery_action || ""}
+                placeholder="如：夹爪重新张开，右手夹爪轻微回撤"
+                onChange={(event) => update({ recovery_action: event.target.value })}
+              />
+            </label>
+            <label className="sentence-field">
+              <span>目标点名称（选填）</span>
+              <Input
+                disabled={!enabled}
+                aria-label="目标点名称"
+                value={fine.target_point_label || ""}
+                placeholder="如：茶叶罐盖子的凸点"
+                onChange={(event) => update({ target_point_label: event.target.value })}
+              />
+            </label>
+            <label className="sentence-field">
+              <span>目标点编号（选填）</span>
+              <Input
+                disabled={!enabled}
+                aria-label="目标点编号"
+                value={fine.target_point_id || ""}
+                placeholder="如：point1"
+                onChange={(event) => update({ target_point_id: event.target.value })}
+              />
+            </label>
+          </section>
+        )}
         <label className="fine-label">补充说明</label>
         <Input.TextArea
           disabled={!enabled}
@@ -293,6 +511,15 @@ export function SegmentEditor({
           showCount
         />
         <Space wrap style={{ marginTop: 14 }}>
+          {fine.outcome === "failure" && (
+            <Button
+              icon={<RotateCcw size={15} />}
+              disabled={!enabled || !canCreateRetry}
+              onClick={onCreateRetry}
+            >
+              从当前帧创建重试片段
+            </Button>
+          )}
           {!reviewing && (
             <Button
               type={selected.annotation_status === "confirmed" ? "default" : "primary"}
@@ -309,7 +536,7 @@ export function SegmentEditor({
           )}
           {reviewing ? (
             <>
-              <Button danger onClick={() => onReview("request_changes")}>
+              <Button danger onClick={() => setReviewModalOpen(true)}>
                 退回修改
               </Button>
               <Button type="primary" disabled={!canSubmit} onClick={() => onReview("approve")}>
@@ -323,6 +550,25 @@ export function SegmentEditor({
           )}
         </Space>
       </div>
+      <Modal
+        open={reviewModalOpen}
+        title="填写退回原因"
+        okText="确认退回"
+        cancelText="取消"
+        okButtonProps={{ disabled: !reviewComment.trim() }}
+        onCancel={() => setReviewModalOpen(false)}
+        onOk={() => {
+          onReview("request_changes", reviewComment.trim());
+          setReviewModalOpen(false);
+        }}
+      >
+        <Input.TextArea
+          rows={4}
+          value={reviewComment}
+          onChange={(event) => setReviewComment(event.target.value)}
+          placeholder="请填写需要修改的具体原因"
+        />
+      </Modal>
     </aside>
   );
 }

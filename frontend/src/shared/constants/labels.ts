@@ -24,4 +24,7 @@ export const statusLabels: Record<string, string> = {
   importing: "导入中",
   ready: "就绪",
   failed: "失败",
+  unchecked: "未抽检",
+  passed: "抽检通过",
+  rejected: "抽检退回",
 };

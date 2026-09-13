@@ -9,8 +9,23 @@ export const queryKeys = {
   myTasks: (review: boolean) => ["my-tasks", review] as const,
   statsEmpty: ["stats", "empty"] as const,
   stats: (projectId: string) => ["stats", projectId] as const,
+  personalWork: (
+    projectId: string | undefined,
+    startDate: string,
+    endDate: string,
+    granularity: string,
+  ) => ["personal-work", projectId, startDate, endDate, granularity] as const,
+  peopleWork: (
+    projectId: string | undefined,
+    startDate: string,
+    endDate: string,
+    role: string | undefined,
+  ) => ["people-work", projectId, startDate, endDate, role] as const,
   qualityItemsEmpty: ["quality-items", "empty"] as const,
   qualityItemsRoot: ["quality-items"] as const,
   qualityItems: (packageId: string) => ["quality-items", packageId] as const,
+  qualityBatches: (projectId?: string) => ["quality-batches", projectId] as const,
+  qualityBatch: (batchId: string) => ["quality-batch", batchId] as const,
+  qualityHistory: (itemId: string) => ["quality-history", itemId] as const,
   workContext: (itemId: string) => ["work-context", itemId] as const,
 };

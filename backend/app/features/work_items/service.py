@@ -12,9 +12,12 @@ from app.features.work_items.state_machine import InvalidTransition
 from app.infrastructure.annotation_storage import AnnotationStorage, PreparedRevision
 from app.models import (
     AnnotationRevision,
+    AssignmentHistory,
     Dataset,
     DatasetEpisode,
     ItemStatus,
+    QaStatus,
+    QualityCheck,
     Role,
     TaskItem,
     TaskPackage,
@@ -185,6 +188,14 @@ def context(item_id: str, user: User, db: Session) -> WorkContext:
             "file_hash": None,
         }
     )
+    quality_comment_query = select(QualityCheck.comment).where(
+        QualityCheck.task_item_id == item.id,
+        QualityCheck.result == QaStatus.REJECTED,
+    )
+    if revision:
+        quality_comment_query = quality_comment_query.where(
+            QualityCheck.created_at > revision.created_at
+        )
     return WorkContext(
         item=TaskItemOut.model_validate(item),
         episode_index=episode.episode_index,
@@ -196,6 +207,19 @@ def context(item_id: str, user: User, db: Session) -> WorkContext:
             key: f"/api/v1/work-items/{item.id}/media/{key}" for key in episode.video_paths
         },
         latest_revision=latest,
+        review_comment=db.scalar(
+            select(AssignmentHistory.reason)
+            .where(
+                AssignmentHistory.task_item_id == item.id,
+                AssignmentHistory.stage == "review",
+                AssignmentHistory.action == "request_changes",
+            )
+            .order_by(AssignmentHistory.created_at.desc())
+            .limit(1)
+        ),
+        quality_comment=db.scalar(
+            quality_comment_query.order_by(QualityCheck.created_at.desc()).limit(1)
+        ),
     )
 
 
@@ -323,6 +347,17 @@ def review_item(item_id: str, payload: ReviewInput, user: User, db: Session) -> 
         file_path=prepared.relative_path,
         file_hash=prepared.file_hash,
     )
+    if payload.decision == "request_changes":
+        db.add(
+            AssignmentHistory(
+                task_item_id=item.id,
+                stage="review",
+                action="request_changes",
+                assignee_id=item.annotator_id,
+                actor_id=user.id,
+                reason=(payload.comment or "").strip(),
+            )
+        )
     audit(db, user.id, f"review_{payload.decision}", "task_item", item.id, comment=payload.comment)
     commit_prepared_revision(db, annotation_storage, prepared, revision)
     return item

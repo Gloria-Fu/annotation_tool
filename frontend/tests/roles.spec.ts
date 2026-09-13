@@ -33,5 +33,10 @@ for (const { role, home } of roles) {
 
     await page.goto("/");
     await expect(page).toHaveURL(new RegExp(`${home}$`));
+    if (role === "reviewer") {
+      await expect(page.getByRole("menuitem", { name: "我的质量抽检" })).toHaveCount(0);
+      await page.goto("/quality");
+      await expect(page).toHaveURL(/\/packages$/);
+    }
   });
 }

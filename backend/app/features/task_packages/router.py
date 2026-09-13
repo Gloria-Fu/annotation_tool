@@ -1,10 +1,12 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.permissions import current_user, require_roles
 from app.database import get_db
 from app.features.task_packages import service
-from app.models import ItemStatus, Role, TaskItem, TaskPackage, User
+from app.models import ClaimPolicy, ItemStatus, Role, TaskItem, TaskPackage, User
 from app.schemas import AssignmentRequest, PackageCreate, PackageOut, ReclaimRequest, TaskItemOut
 
 router = APIRouter()
@@ -15,7 +17,7 @@ def list_packages(
     project_id: str | None = Query(default=None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> list[TaskPackage]:
+) -> list[dict[str, Any]]:
     return service.list_packages(project_id, user, db)
 
 
@@ -59,10 +61,11 @@ def claim_annotation(
 @router.post("/api/v1/review-tasks/claim", response_model=TaskItemOut)
 def claim_review(
     package_id: str = Query(...),
+    claim_policy: ClaimPolicy | None = Query(default=None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TaskItem:
-    return service.claim(package_id, user, True, db)
+    return service.claim(package_id, user, True, db, claim_policy)
 
 
 @router.get("/api/v1/my-tasks", response_model=list[TaskItemOut])

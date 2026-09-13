@@ -1,6 +1,18 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from "antd";
+import {
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Segmented,
+  Select,
+  Space,
+  Table,
+  Tag,
+  message,
+} from "antd";
 import { Boxes, Play, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
@@ -12,6 +24,7 @@ import { PageHeading } from "../../shared/ui/PageHeading";
 import { datasetsApi } from "../datasets/api";
 import { usersApi } from "../users/api";
 import { taskPackagesApi, type PackageInput } from "./api";
+import { claimFailureMessage, claimFailureTitle } from "./claimFailure";
 
 type PackageFormValues = Omit<PackageInput, "project_id">;
 
@@ -20,6 +33,12 @@ export function PackagesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [claimFailure, setClaimFailure] = useState<{
+    review: boolean;
+    message: string;
+  } | null>(null);
+  const [reviewClaimTarget, setReviewClaimTarget] = useState<TaskPackage | null>(null);
+  const [reviewClaimPolicy, setReviewClaimPolicy] = useState<"sequential" | "random">("sequential");
   const { data: packages = [] } = useQuery({
     queryKey: queryKeys.packages(projectId),
     queryFn: () => taskPackagesApi.list(projectId as string),
@@ -55,10 +74,24 @@ export function PackagesPage() {
     onError: (error: ApiError) => message.error(error.message),
   });
   const claim = useMutation({
-    mutationFn: ({ id, review }: { id: string; review: boolean }) =>
-      taskPackagesApi.claim(id, review),
-    onSuccess: (item) => navigate(`/work/${item.id}`),
-    onError: (error: ApiError) => message.error(error.message),
+    mutationFn: ({
+      id,
+      review,
+      claimPolicy,
+    }: {
+      id: string;
+      review: boolean;
+      claimPolicy?: "sequential" | "random";
+    }) => taskPackagesApi.claim(id, review, claimPolicy),
+    onSuccess: (item) => {
+      setReviewClaimTarget(null);
+      void navigate(`/work/${item.id}`);
+    },
+    onError: (error: Error, variables) =>
+      setClaimFailure({
+        review: variables.review,
+        message: claimFailureMessage(error),
+      }),
   });
   const isReview = user.role === "reviewer";
 
@@ -96,6 +129,11 @@ export function PackagesPage() {
               render: (value: string) => (value === "random" ? "随机" : "顺序"),
             },
             {
+              title: "条目进度",
+              render: (_, row) =>
+                `总数 ${row.total_items} · 已领取 ${row.claimed_items} · 已标注 ${row.annotated_items} · 已审核 ${row.reviewed_items}`,
+            },
+            {
               title: "操作",
               render: (_, row) => (
                 <Space>
@@ -109,7 +147,15 @@ export function PackagesPage() {
                       type="primary"
                       size="small"
                       icon={<Play size={14} />}
-                      onClick={() => claim.mutate({ id: row.id, review: isReview })}
+                      loading={claim.isPending}
+                      onClick={() => {
+                        if (isReview) {
+                          setReviewClaimPolicy("sequential");
+                          setReviewClaimTarget(row);
+                        } else {
+                          claim.mutate({ id: row.id, review: false });
+                        }
+                      }}
                     >
                       领取{isReview ? "审核" : "标注"}
                     </Button>
@@ -180,6 +226,46 @@ export function PackagesPage() {
             创建草稿
           </Button>
         </Form>
+      </Modal>
+      <Modal
+        open={claimFailure !== null}
+        title={claimFailure ? claimFailureTitle(claimFailure.review) : undefined}
+        okText="知道了"
+        onOk={() => setClaimFailure(null)}
+        onCancel={() => setClaimFailure(null)}
+      >
+        {claimFailure?.message}
+      </Modal>
+      <Modal
+        open={reviewClaimTarget !== null}
+        title="选择审核领取方式"
+        okText="开始领取"
+        cancelText="取消"
+        confirmLoading={claim.isPending}
+        onOk={() => {
+          if (reviewClaimTarget) {
+            claim.mutate({
+              id: reviewClaimTarget.id,
+              review: true,
+              claimPolicy: reviewClaimPolicy,
+            });
+          }
+        }}
+        onCancel={() => {
+          if (!claim.isPending) setReviewClaimTarget(null);
+        }}
+      >
+        <Segmented
+          block
+          value={reviewClaimPolicy}
+          options={[
+            { value: "sequential", label: "顺序抽检" },
+            { value: "random", label: "随机抽检" },
+          ]}
+          onChange={(value) => {
+            if (value === "sequential" || value === "random") setReviewClaimPolicy(value);
+          }}
+        />
       </Modal>
     </>
   );

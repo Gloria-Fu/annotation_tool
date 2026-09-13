@@ -12,6 +12,7 @@ import { PackageItemsPage } from "../features/task-packages/PackageItemsPage";
 import { PackagesPage } from "../features/task-packages/PackagesPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { WorkbenchPage } from "../features/workbench/WorkbenchPage";
+import { MyWorkStatisticsPage, WorkStatisticsPage } from "../features/reports/WorkStatisticsPage";
 import type { User } from "../shared/api/types";
 
 function AuthenticatedRoutes({ user }: { user: User }) {
@@ -21,6 +22,8 @@ function AuthenticatedRoutes({ user }: { user: User }) {
       <Routes>
         <Route path="/" element={<Navigate to={home} replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/work-statistics" element={<WorkStatisticsPage />} />
+        <Route path="/my-work" element={<MyWorkStatisticsPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/datasets" element={<DatasetsPage />} />
@@ -28,7 +31,16 @@ function AuthenticatedRoutes({ user }: { user: User }) {
         <Route path="/packages/:packageId" element={<PackageItemsPage />} />
         <Route path="/my-tasks" element={<MyTasksPage />} />
         <Route path="/reviews" element={<MyTasksPage review />} />
-        <Route path="/quality" element={<QualityPage />} />
+        <Route
+          path="/quality"
+          element={
+            user.role === "developer_admin" || user.role === "annotation_manager" ? (
+              <QualityPage />
+            ) : (
+              <Navigate to={home} replace />
+            )
+          }
+        />
         <Route path="/work/:itemId" element={<WorkbenchPage />} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
