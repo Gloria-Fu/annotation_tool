@@ -6,7 +6,7 @@ export function PageHeading({
   action,
   leading,
 }: {
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   action?: ReactNode;
   leading?: ReactNode;

@@ -59,7 +59,6 @@ describe("segmentReducer", () => {
         initial_state: "张开",
         object_location: "货架中央",
         object_name: "杯子",
-        reference: "杯身",
         orientation: "平行",
         contact_point: "两侧",
         gripper_action: "闭合",

@@ -30,6 +30,7 @@ const RETRY_RESET_KEYS = new Set([
   "initial_position",
   "initial_state",
   "approach",
+  "reference",
   "orientation",
   "contact_point",
   "gripper_action",

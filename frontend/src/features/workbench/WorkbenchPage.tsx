@@ -20,6 +20,11 @@ import { currentFineAnnotation, fineAnnotationText, templateIssues } from "./mod
 import { isSkillEnabled } from "./skillAvailability";
 import { GripperMarkModal, type GripperMarkSession } from "./components/GripperMarkModal";
 
+function assigneeLabel(person: WorkContext["annotator"]) {
+  if (!person) return "";
+  return `${person.display_name} @${person.username}`;
+}
+
 function initialSegments(context: WorkContext): Segment[] {
   const segments = context.latest_revision?.payload.segments;
   return Array.isArray(segments) && segments.length > 0
@@ -116,7 +121,7 @@ export function WorkbenchPage() {
       workbenchApi.submit(itemId, workbenchApi.revisionInput(state.segments, revision)),
     onSuccess: () => {
       message.success("已提交审核");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.myTasks(false) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.myTasksRoot(false) });
       void navigate(-1);
     },
     onError: (error: Error) => message.error(error.message),
@@ -136,7 +141,7 @@ export function WorkbenchPage() {
       }),
     onSuccess: () => {
       message.success("审核操作成功");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.myTasks(true) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.myTasksRoot(true) });
       void navigate(-1);
     },
     onError: (error: Error) => message.error(error.message),
@@ -270,7 +275,17 @@ export function WorkbenchPage() {
   return (
     <div className="workbench-page">
       <PageHeading
-        title={`Episode ${context.episode_index}`}
+        title={
+          <span className="workbench-title">
+            <span>Episode {context.episode_index}</span>
+            {(context.annotator || context.reviewer) && (
+              <span className="workbench-assignees">
+                {context.annotator && <span>标注：{assigneeLabel(context.annotator)}</span>}
+                {context.reviewer && <span>审核：{assigneeLabel(context.reviewer)}</span>}
+              </span>
+            )}
+          </span>
+        }
         subtitle={`${context.length} 帧 · ${(context.length / fps).toFixed(2)} 秒 · ${context.tasks.join(" / ")}`}
         leading={
           <button
@@ -297,6 +312,8 @@ export function WorkbenchPage() {
             context={context}
             registerVideo={videoSync.registerVideo}
             changeRate={videoSync.changeRate}
+            onPlay={videoSync.playAll}
+            onPause={videoSync.pauseAll}
             onFrameChange={videoSync.syncFrame}
             pointMarking={pointMarking}
             keyframePoint={selected?.fine_annotation?.keyframe_point}

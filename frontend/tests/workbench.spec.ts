@@ -36,6 +36,8 @@ const annotatorItem = {
 
 const contextFor = (item: typeof annotatorItem, userId: string) => ({
   item: { ...item, reviewer_id: userId === reviewer.id ? reviewer.id : item.reviewer_id },
+  annotator: item.annotator_id === annotator.id ? annotator : null,
+  reviewer: userId === reviewer.id || item.reviewer_id === reviewer.id ? reviewer : null,
   episode_index: 0,
   length: 100,
   fps: 10,
@@ -85,7 +87,6 @@ function completedContext(userId: string) {
                 initial_state: "张开",
                 object_location: "货架中央",
                 object_name: "杯子",
-                reference: "杯身",
                 orientation: "平行",
                 contact_point: "两侧",
                 gripper_action: "闭合",
@@ -208,7 +209,10 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await page.locator(".ant-select-dropdown:visible").getByTitle("左手", { exact: true }).click();
   await sentence.getByRole("textbox", { name: "物体名称", exact: true }).fill("黄瓜");
   await sentence.getByRole("textbox", { name: "夹爪初始位置", exact: true }).fill("货架前侧");
-  await expect(page.locator(".fine-preview")).toContainText("左手夹爪初始位于货架前侧");
+  await expect(page.locator(".fine-preview").getByText("【左手】", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".fine-preview").getByText("【货架前侧】", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "提交审核" })).toBeDisabled();
   await expect.poll(() => draftCalls, { timeout: 5000 }).toBeGreaterThan(0);
 
@@ -224,7 +228,7 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   );
   await page.reload();
   await expect(page.locator(".fine-preview")).toHaveText(
-    "左手夹爪初始位于货架前侧，状态为张开。靠近位于货架中央的杯子，夹爪以相对杯身平行的姿态，在其两侧闭合夹爪，夹持住物体。",
+    "【左手】夹爪初始位于【货架前侧】，状态为【张开】。靠近位于【货架中央】的【杯子】，夹爪以【平行】的姿态，在其【两侧】【闭合】夹爪，夹持住物体。",
   );
   await page.getByRole("button", { name: "提交审核" }).click();
   await expect.poll(() => submitCalls).toBe(1);
@@ -243,6 +247,7 @@ test("skill selection switches sentence fields without losing shared input", asy
   );
   await page.getByTitle("拾取 (Pick)", { exact: true }).click();
   await page.getByRole("textbox", { name: "物体名称", exact: true }).fill("黄瓜");
+  await expect(page.getByRole("textbox", { name: "姿态参考", exact: true })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "原支撑面", exact: true })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "靠近目标位置", exact: true })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "物体结束位置", exact: true })).toHaveCount(0);
@@ -256,6 +261,7 @@ test("skill selection switches sentence fields without losing shared input", asy
     if (!isSkillEnabled(skill)) continue;
     await selector.click();
     await page.getByTitle(label, { exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "姿态参考", exact: true })).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: field, exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "物体名称", exact: true })).toHaveValue("黄瓜");
     await expect(page.getByRole("textbox", { name: "原支撑面", exact: true })).toHaveCount(0);
@@ -310,6 +316,12 @@ test("reviewer can approve an assigned task", async ({ page }) => {
   await page.goto("/packages");
   await page.goto("/work/item-1");
   await expect(page.getByText("待审核")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Episode 0/ })).toContainText(
+    "标注：标注员 @annotator",
+  );
+  await expect(page.getByRole("heading", { name: /Episode 0/ })).toContainText(
+    "审核：审核员 @reviewer",
+  );
   await expect(page.getByRole("button", { name: "审核通过" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "保存草稿" })).not.toBeVisible();
   await page.getByRole("button", { name: "审核通过" }).click();
@@ -352,7 +364,8 @@ test("imported skill immediately previews its template and saves current input",
   await expect(page.getByRole("region", { name: "最终标注结果" })).toContainText("待填写：操作手");
   await page.getByRole("textbox", { name: "物体名称", exact: true }).fill("新杯子");
   await expect(preview).toContainText("新杯子");
-  await expect(preview).not.toContainText("【物体名称】");
+  await expect(preview.locator(".fine-preview-token-filled")).toContainText("【新杯子】");
+  await expect(preview.getByText("【物体名称】", { exact: true })).toHaveCount(0);
   await expect(page.locator(".timeline-segment")).toHaveText("1. 拾取 (Pick) · 成功");
   await page.screenshot({ path: testInfo.outputPath("current-template-preview.png") });
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
@@ -386,7 +399,9 @@ test("Pick failure stores a structured reason and creates a clean retry segment"
   await expect(page.getByRole("region", { name: "标注句编辑器" })).toHaveCount(0);
   await expect(page.locator("strong").filter({ hasText: "失败关键帧（选填）" })).toBeVisible();
   await expect(page.getByRole("button", { name: "确认标注结果" })).toBeEnabled();
-  await expect(page.locator(".fine-preview")).toContainText("本次尝试失败，原因是夹爪向左上方偏移");
+  await expect(
+    page.locator(".fine-preview").getByText("【左上方】", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".fine-preview")).not.toContainText("夹持住物体。");
   await page.screenshot({ path: testInfo.outputPath("pick-failure-editor.png") });
   await page.getByRole("button", { name: "从当前帧创建重试片段" }).click();

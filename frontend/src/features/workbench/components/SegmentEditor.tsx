@@ -10,7 +10,12 @@ import type {
 } from "../../../shared/api/types";
 import { annotationHands, handLabel, completeGripper } from "../model/gripperKeyframes";
 import { durationSeconds, formatFrameTime } from "../model/timelineMath";
-import { currentFineAnnotation, fineAnnotationText, templateIssues } from "../model/fineAnnotation";
+import {
+  currentFineAnnotation,
+  fineAnnotationPreview,
+  fineAnnotationText,
+  templateIssues,
+} from "../model/fineAnnotation";
 import { getSkillDefinition, sentenceTokens } from "../skillDefinitions";
 import { isSkillEnabled, SKILL_OPTIONS } from "../skillAvailability";
 import { FAILURE_REASON_OPTIONS, failureReasonLabel } from "../failureReasons";
@@ -157,7 +162,21 @@ export function SegmentEditor({
             </Button>
           </Space>
         </div>
-        <div className="fine-preview">{fineAnnotationText(fine)}</div>
+        <div className="fine-preview">
+          {fineAnnotationPreview(fine).map((part, index) =>
+            part.kind === "plain" ? (
+              <span key={index}>{part.text}</span>
+            ) : (
+              <span
+                key={index}
+                className={`fine-preview-token fine-preview-token-${part.kind}`}
+                title={part.kind === "filled" ? "已填写" : "待填写"}
+              >
+                {part.text}
+              </span>
+            ),
+          )}
+        </div>
         {reviewReason && !reviewing && (
           <Typography.Paragraph type="danger">审核退回原因：{reviewReason}</Typography.Paragraph>
         )}

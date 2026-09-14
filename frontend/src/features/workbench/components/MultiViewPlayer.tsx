@@ -64,6 +64,8 @@ export function MultiViewPlayer({
   context,
   registerVideo,
   changeRate,
+  onPlay,
+  onPause,
   onFrameChange,
   pointMarking,
   keyframePoint,
@@ -74,6 +76,8 @@ export function MultiViewPlayer({
   context: WorkContext;
   registerVideo: (key: string, element: HTMLVideoElement | null) => void;
   changeRate: (rate: number) => void;
+  onPlay: (source?: HTMLVideoElement) => void;
+  onPause: (source?: HTMLVideoElement) => void;
   onFrameChange: (frame: number) => void;
   pointMarking: boolean;
   keyframePoint?: KeyframePoint;
@@ -126,6 +130,8 @@ export function MultiViewPlayer({
                     onFrameChange(Math.round(event.currentTarget.currentTime * context.fps))
                 : undefined
             }
+            onPlay={index === 0 ? (event) => onPlay(event.currentTarget) : undefined}
+            onPause={index === 0 ? (event) => onPause(event.currentTarget) : undefined}
             controls={index === 0}
           />
           {pointMarking && (

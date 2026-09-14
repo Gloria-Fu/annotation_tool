@@ -30,8 +30,7 @@ const object: SentenceToken[] = [
   field("object_name", "物体名称", "如：黄瓜"),
 ];
 const posture: SentenceToken[] = [
-  "，夹爪以相对",
-  field("reference", "姿态参考", "如：物体长轴"),
+  "，夹爪以",
   field("orientation", "相对姿态", "选择姿态", ["垂直", "平行", "倾斜", "无法判断"]),
   "的姿态，",
 ];

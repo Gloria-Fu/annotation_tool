@@ -5,6 +5,11 @@ import type { Segment } from "../../../shared/api/types";
 import { gripperIssues } from "./gripperKeyframes";
 import { failureReasonLabel } from "../failureReasons";
 
+export type FineAnnotationPreviewPart = {
+  text: string;
+  kind: "plain" | "filled" | "missing";
+};
+
 export function currentFineAnnotation(segment: Segment): FineAnnotation {
   const fine = segment.fine_annotation;
   return {
@@ -90,6 +95,20 @@ function tokenText(skill: string, values: Record<string, string>): string {
     .join("");
 }
 
+function tokenPreviewParts(
+  skill: string,
+  values: Record<string, string>,
+): FineAnnotationPreviewPart[] {
+  return sentenceTokens(skill, values).flatMap((token): FineAnnotationPreviewPart[] => {
+    if (typeof token === "string") return [{ text: token, kind: "plain" }];
+    const value = values[token.key]?.trim();
+    if (value && (!token.options || token.options.includes(value))) {
+      return [{ text: `【${value}】`, kind: "filled" }];
+    }
+    return token.optional ? [] : [{ text: `【${token.label}】`, kind: "missing" }];
+  });
+}
+
 function retryText(fine: FineAnnotation): string {
   const recovery = fine.recovery_action?.trim();
   const target = fine.target_point_label?.trim();
@@ -110,6 +129,95 @@ function failureText(fine: FineAnnotation): string {
       ? fine.failure_detail?.trim()
       : "";
   return `本次尝试失败，原因是${reason}${detail ? `（${detail}）` : ""}。`;
+}
+
+function retryPreviewParts(fine: FineAnnotation): FineAnnotationPreviewPart[] {
+  const recovery = fine.recovery_action?.trim();
+  const target = fine.target_point_label?.trim();
+  const pointId = fine.target_point_id?.trim();
+  if (!recovery && !target) return [];
+  const parts: FineAnnotationPreviewPart[] = [{ text: "失败后", kind: "plain" }];
+  if (recovery) {
+    parts.push({ text: "，", kind: "plain" }, { text: `【${recovery}】`, kind: "filled" });
+  }
+  if (target) {
+    parts.push(
+      { text: "，重新对准", kind: "plain" },
+      { text: `【${target}】`, kind: "filled" },
+      ...(pointId
+        ? [
+            { text: "（", kind: "plain" as const },
+            { text: `【${pointId}】`, kind: "filled" as const },
+            { text: "）", kind: "plain" as const },
+          ]
+        : []),
+    );
+  }
+  parts.push({ text: "。", kind: "plain" });
+  return parts;
+}
+
+function failurePreviewParts(fine: FineAnnotation): FineAnnotationPreviewPart[] {
+  const parts: FineAnnotationPreviewPart[] = [{ text: "本次尝试失败，原因是", kind: "plain" }];
+  const code = fine.failure_reason_code;
+  const direction = fine.failure_direction?.trim();
+  const detail = fine.failure_detail?.trim();
+  if (!code) {
+    parts.push({ text: "【失败原因】", kind: "missing" });
+  } else if (code === "gripper_deviated") {
+    parts.push({ text: "夹爪向", kind: "plain" });
+    parts.push(
+      direction
+        ? { text: `【${direction}】`, kind: "filled" }
+        : { text: "【偏移方向】", kind: "missing" },
+    );
+    parts.push({ text: "偏移", kind: "plain" });
+  } else if (code === "other") {
+    parts.push(
+      detail
+        ? { text: `【${detail}】`, kind: "filled" }
+        : { text: "【失败原因说明】", kind: "missing" },
+    );
+  } else {
+    parts.push({
+      text: failureReasonLabel(code, direction, detail),
+      kind: "plain",
+    });
+  }
+  if (detail && code && code !== "other") {
+    parts.push(
+      { text: "（", kind: "plain" },
+      { text: `【${detail}】`, kind: "filled" },
+      { text: "）", kind: "plain" },
+    );
+  }
+  parts.push({ text: "。", kind: "plain" });
+  return parts;
+}
+
+export function fineAnnotationPreview(fine: FineAnnotation): FineAnnotationPreviewPart[] {
+  if (!getSkillDefinition(fine.skill || "")) {
+    return [{ text: "【请选择技能】", kind: "missing" }];
+  }
+  const outcome = fine.outcome || "pending";
+  if (outcome === "failure") {
+    return [
+      ...failurePreviewParts(fine),
+      ...(fine.notes ? [{ text: ` ${fine.notes}`, kind: "plain" as const }] : []),
+    ];
+  }
+  const values = fine.template_values || {};
+  const parts = [...retryPreviewParts(fine), ...tokenPreviewParts(fine.skill || "", values)];
+  if (fine.skill === "Place" && values.retreat?.trim()) {
+    parts.push(
+      { text: "随后夹爪移动至", kind: "plain" },
+      { text: `【${values.retreat.trim()}】`, kind: "filled" },
+      { text: "。", kind: "plain" },
+    );
+  }
+  if (outcome === "pending") parts.push({ text: "【请选择结果】", kind: "missing" });
+  if (fine.notes) parts.push({ text: ` ${fine.notes}`, kind: "plain" });
+  return parts;
 }
 
 export function fineAnnotationText(fine: FineAnnotation): string {
