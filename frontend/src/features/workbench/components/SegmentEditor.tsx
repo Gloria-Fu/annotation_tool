@@ -16,7 +16,7 @@ import {
   fineAnnotationText,
   templateIssues,
 } from "../model/fineAnnotation";
-import { getSkillDefinition, sentenceTokens } from "../skillDefinitions";
+import { getSkillDefinition, sentenceFieldValue, sentenceTokens } from "../skillDefinitions";
 import { isSkillEnabled, SKILL_OPTIONS } from "../skillAvailability";
 import { FAILURE_REASON_OPTIONS, failureReasonLabel } from "../failureReasons";
 
@@ -351,7 +351,7 @@ export function SegmentEditor({
                       <Input
                         disabled={!enabled}
                         aria-label={token.label}
-                        value={values[token.key] || ""}
+                        value={sentenceFieldValue(token, values) || ""}
                         placeholder={token.example}
                         onChange={(event) => updateValue(token.key, event.target.value)}
                       />
@@ -360,18 +360,6 @@ export function SegmentEditor({
                 ),
               )}
             </div>
-            {definition.name === "Place" && (
-              <label className="sentence-field">
-                <span>夹爪结束位置（选填）</span>
-                <Input
-                  disabled={!enabled}
-                  aria-label="夹爪结束位置"
-                  value={values.retreat || ""}
-                  placeholder="如：托盘右上方"
-                  onChange={(event) => updateValue("retreat", event.target.value)}
-                />
-              </label>
-            )}
           </div>
         )}
         {definition && fine.outcome !== "failure" && (
@@ -539,26 +527,33 @@ export function SegmentEditor({
               从当前帧创建重试片段
             </Button>
           )}
-          {!reviewing && (
-            <Button
-              type={selected.annotation_status === "confirmed" ? "default" : "primary"}
-              onClick={onConfirm}
-              disabled={issues.length > 0 || !enabled}
-            >
-              {selected.annotation_status === "confirmed" ? "已确认标注结果" : "确认标注结果"}
-            </Button>
-          )}
-          {!reviewing && (
-            <Button onClick={onSave} disabled={!enabled} loading={isSaving}>
-              保存草稿
-            </Button>
-          )}
+          <Button
+            type={selected.annotation_status === "confirmed" ? "default" : "primary"}
+            onClick={onConfirm}
+            disabled={issues.length > 0 || !enabled}
+          >
+            {selected.annotation_status === "confirmed"
+              ? reviewing
+                ? "已确认审核修改"
+                : "已确认标注结果"
+              : reviewing
+                ? "确认审核修改"
+                : "确认标注结果"}
+          </Button>
+          <Button onClick={onSave} disabled={!enabled} loading={isSaving}>
+            {reviewing ? "保存审核修改" : "保存草稿"}
+          </Button>
           {reviewing ? (
             <>
-              <Button danger onClick={() => setReviewModalOpen(true)}>
+              <Button danger loading={isSubmitting} onClick={() => setReviewModalOpen(true)}>
                 退回修改
               </Button>
-              <Button type="primary" disabled={!canSubmit} onClick={() => onReview("approve")}>
+              <Button
+                type="primary"
+                disabled={!canSubmit}
+                loading={isSubmitting}
+                onClick={() => onReview("approve")}
+              >
                 审核通过
               </Button>
             </>

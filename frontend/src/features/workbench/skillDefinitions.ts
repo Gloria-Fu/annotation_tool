@@ -5,6 +5,7 @@ export type SentenceField = {
   example: string;
   options?: string[];
   optional?: boolean;
+  autoFillFrom?: string;
 };
 export type SentenceToken = string | SentenceField;
 export type SkillDefinition = {
@@ -20,7 +21,15 @@ const field = (
   example: string,
   options?: string[],
   optional?: boolean,
-): SentenceField => ({ key, label, example, options, optional });
+  autoFillFrom?: string,
+): SentenceField => ({
+  key,
+  label,
+  example,
+  options,
+  optional,
+  autoFillFrom,
+});
 const states = ["张开", "闭合", "无法判断"];
 const actions = ["张开", "闭合", "保持张开", "保持闭合", "无法判断"];
 const object: SentenceToken[] = [
@@ -61,20 +70,67 @@ function tokens(name: SkillName): SentenceToken[] {
       field("position_end", "放置位置", "如：托盘中央"),
       "，待其受到支撑后",
       field("gripper_action", "释放时夹爪动作", "选择动作", actions),
-      "夹爪。",
+      "夹爪",
+      field(
+        "lift_gripper",
+        "抬起夹爪（选填）",
+        "选择夹爪",
+        ["左手夹爪", "右手夹爪", "双手夹爪"],
+        true,
+      ),
+      field("lift_action", "抬起动作（选填）", "如：向上抬起", undefined, true),
+      "。移动至",
+      field("lift_destination", "移动至（选填）", "如：托盘右上方", undefined, true, "retreat"),
+      "。",
     ];
-  const base: SentenceToken[] = [
-    ...start,
-    ...(name === "Pick"
-      ? ["。靠近位于"]
-      : ["，向", field("approach", "靠近目标位置", "如：货架右上方"), "移动。靠近位于"]),
+  const objectTarget: SentenceToken[] = [
     field("object_location", "物体所在位置", "如：货架右侧"),
     "的",
     ...object,
+  ];
+  if (name === "Pick")
+    return [
+      ...start,
+      "。靠近位于",
+      ...objectTarget,
+      "，夹爪以相对",
+      field(
+        "pick_relative_object",
+        "相对物体",
+        "自动填入物体名称",
+        undefined,
+        false,
+        "object_name",
+      ),
+      field("orientation", "相对姿态", "选择姿态", ["垂直", "平行", "倾斜", "无法判断"]),
+      "的姿态，",
+      field("gripper_action", "夹爪动作", "选择动作", actions),
+      "夹爪，夹持住",
+      field("pick_grasped_object", "夹持物体", "自动填入物体名称", undefined, false, "object_name"),
+      "的",
+      field("contact_point", "接触部位", "如：两侧"),
+      "，",
+      field("lift_action", "抬起动作（选填）", "如：向上抬起", undefined, true),
+      field(
+        "lift_gripper",
+        "抬起夹爪（选填）",
+        "选择夹爪",
+        ["左手夹爪", "右手夹爪", "双手夹爪"],
+        true,
+      ),
+      "，移动至",
+      field("lift_destination", "移动至（选填）", "如：操作台上方", undefined, true),
+      "。",
+    ];
+  const base: SentenceToken[] = [
+    ...start,
+    "，向",
+    field("approach", "靠近目标位置", "如：货架右上方"),
+    "移动。靠近位于",
+    ...objectTarget,
     ...posture,
   ];
   if (name === "Grasp") return [...base, ...contact, "形成稳定抓握。"];
-  if (name === "Pick") return [...base, ...contact, "夹持住物体。"];
   const action = name === "Push" ? "推动" : "拉动";
   return [
     ...base,
@@ -132,6 +188,63 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
 ];
 export function getSkillDefinition(skill: string) {
   return SKILL_DEFINITIONS.find((definition) => definition.name === skill);
+}
+export function sentenceFieldValue(
+  field: SentenceField,
+  values: Record<string, string>,
+): string | undefined {
+  const value = values[field.key]?.trim();
+  if (value) return value;
+  return field.autoFillFrom ? values[field.autoFillFrom]?.trim() : undefined;
+}
+export function sentenceTokensForOutput(
+  skill: string,
+  values: Record<string, string>,
+): SentenceToken[] {
+  const tokens = sentenceTokens(skill, values);
+  const hasLiftValue = ["lift_action", "lift_gripper", "lift_destination"].some((key) =>
+    values[key]?.trim(),
+  );
+  if (skill === "Pick") {
+    const liftIndex = tokens.findIndex(
+      (token) => typeof token !== "string" && token.key === "lift_action",
+    );
+    if (liftIndex < 0) return tokens;
+    const base = tokens.slice(0, liftIndex - 1);
+    if (!hasLiftValue) return [...base, "。"];
+    const liftAction = tokens[liftIndex];
+    const liftGripper = tokens[liftIndex + 1];
+    const liftDestination = tokens[liftIndex + 3];
+    const tail: SentenceToken[] = ["，"];
+    if (values.lift_action?.trim() && liftAction) tail.push(liftAction);
+    if (values.lift_gripper?.trim() && liftGripper) tail.push(liftGripper);
+    if (values.lift_destination?.trim() && liftDestination) tail.push("，移动至", liftDestination);
+    tail.push("。");
+    return [...base, ...tail];
+  }
+  if (skill === "Place") {
+    const liftIndex = tokens.findIndex(
+      (token) => typeof token !== "string" && token.key === "lift_gripper",
+    );
+    if (liftIndex < 0) return tokens;
+    const base = tokens.slice(0, liftIndex);
+    if (!hasLiftValue && !values.retreat?.trim()) return [...base, "。"];
+    const liftGripper = tokens[liftIndex];
+    const liftAction = tokens[liftIndex + 1];
+    const liftDestination = tokens[liftIndex + 3];
+    const tail: SentenceToken[] = [];
+    if (values.lift_gripper?.trim() || values.lift_action?.trim()) {
+      tail.push("。");
+      if (values.lift_gripper?.trim() && liftGripper) tail.push(liftGripper);
+      if (values.lift_action?.trim() && liftAction) tail.push(liftAction);
+    }
+    if ((values.lift_destination?.trim() || values.retreat?.trim()) && liftDestination) {
+      tail.push("。移动至", liftDestination);
+    }
+    tail.push("。");
+    return [...base, ...tail];
+  }
+  return tokens;
 }
 export function sentenceTokens(skill: string, values: Record<string, string>): SentenceToken[] {
   return (getSkillDefinition(skill)?.tokens || []).flatMap((token): SentenceToken[] => {

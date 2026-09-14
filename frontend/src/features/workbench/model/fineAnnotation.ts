@@ -1,5 +1,10 @@
 import type { FineAnnotation } from "../../../shared/api/types";
-import { getSkillDefinition, sentenceTokens } from "../skillDefinitions";
+import {
+  getSkillDefinition,
+  sentenceFieldValue,
+  sentenceTokens,
+  sentenceTokensForOutput,
+} from "../skillDefinitions";
 import { isSkillEnabled } from "../skillAvailability";
 import type { Segment } from "../../../shared/api/types";
 import { gripperIssues } from "./gripperKeyframes";
@@ -43,12 +48,15 @@ export function templateIssues(segment: Segment): string[] {
     ...(fine.outcome === "failure"
       ? []
       : sentenceTokens(skill, values).flatMap((token) =>
-          typeof token !== "string" &&
-          !token.optional &&
-          (!values[token.key]?.trim() ||
-            (token.options && !token.options.includes(values[token.key])))
-            ? [token.label]
-            : [],
+          typeof token === "string"
+            ? []
+            : (() => {
+                const value = sentenceFieldValue(token, values);
+                return !token.optional &&
+                  (!value || (token.options && !token.options.includes(value)))
+                  ? [token.label]
+                  : [];
+              })(),
         )),
   ];
   if (fine.outcome === "failure") {
@@ -82,12 +90,13 @@ export function templateIssues(segment: Segment): string[] {
 }
 
 function tokenText(skill: string, values: Record<string, string>): string {
-  return sentenceTokens(skill, values)
+  return sentenceTokensForOutput(skill, values)
     .map((token) =>
       typeof token === "string"
         ? token
-        : values[token.key]?.trim() && (!token.options || token.options.includes(values[token.key]))
-          ? values[token.key].trim()
+        : sentenceFieldValue(token, values) &&
+            (!token.options || token.options.includes(sentenceFieldValue(token, values)!))
+          ? sentenceFieldValue(token, values)!
           : token.optional
             ? ""
             : "【" + token.label + "】",
@@ -99,9 +108,9 @@ function tokenPreviewParts(
   skill: string,
   values: Record<string, string>,
 ): FineAnnotationPreviewPart[] {
-  return sentenceTokens(skill, values).flatMap((token): FineAnnotationPreviewPart[] => {
+  return sentenceTokensForOutput(skill, values).flatMap((token): FineAnnotationPreviewPart[] => {
     if (typeof token === "string") return [{ text: token, kind: "plain" }];
-    const value = values[token.key]?.trim();
+    const value = sentenceFieldValue(token, values);
     if (value && (!token.options || token.options.includes(value))) {
       return [{ text: `【${value}】`, kind: "filled" }];
     }
@@ -208,13 +217,6 @@ export function fineAnnotationPreview(fine: FineAnnotation): FineAnnotationPrevi
   }
   const values = fine.template_values || {};
   const parts = [...retryPreviewParts(fine), ...tokenPreviewParts(fine.skill || "", values)];
-  if (fine.skill === "Place" && values.retreat?.trim()) {
-    parts.push(
-      { text: "随后夹爪移动至", kind: "plain" },
-      { text: `【${values.retreat.trim()}】`, kind: "filled" },
-      { text: "。", kind: "plain" },
-    );
-  }
   if (outcome === "pending") parts.push({ text: "【请选择结果】", kind: "missing" });
   if (fine.notes) parts.push({ text: ` ${fine.notes}`, kind: "plain" });
   return parts;
@@ -228,10 +230,6 @@ export function fineAnnotationText(fine: FineAnnotation): string {
     return [failureText(fine), fine.notes].filter(Boolean).join(" ");
   }
   const sentence = tokenText(fine.skill || "", values);
-  const retreat =
-    fine.skill === "Place" && values.retreat?.trim()
-      ? "随后夹爪移动至" + values.retreat.trim() + "。"
-      : "";
   const status = outcome === "pending" ? "【请选择结果】" : "";
-  return [retryText(fine), sentence + retreat, status, fine.notes].filter(Boolean).join(" ");
+  return [retryText(fine), sentence, status, fine.notes].filter(Boolean).join(" ");
 }

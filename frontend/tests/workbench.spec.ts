@@ -228,7 +228,7 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   );
   await page.reload();
   await expect(page.locator(".fine-preview")).toHaveText(
-    "【左手】夹爪初始位于【货架前侧】，状态为【张开】。靠近位于【货架中央】的【杯子】，夹爪以【平行】的姿态，在其【两侧】【闭合】夹爪，夹持住物体。",
+    "【左手】夹爪初始位于【货架前侧】，状态为【张开】。靠近位于【货架中央】的【杯子】，夹爪以相对【杯子】【平行】的姿态，【闭合】夹爪，夹持住【杯子】的【两侧】。",
   );
   await page.getByRole("button", { name: "提交审核" }).click();
   await expect.poll(() => submitCalls).toBe(1);
@@ -265,6 +265,20 @@ test("skill selection switches sentence fields without losing shared input", asy
     await expect(page.getByRole("textbox", { name: field, exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "物体名称", exact: true })).toHaveValue("黄瓜");
     await expect(page.getByRole("textbox", { name: "原支撑面", exact: true })).toHaveCount(0);
+    if (skill === "Place") {
+      await expect(
+        page.getByRole("combobox", { name: "抬起夹爪（选填）", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "抬起动作（选填）", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "移动至（选填）", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "夹爪结束位置（选填）", exact: true }),
+      ).toHaveCount(0);
+    }
   }
   await page.getByRole("heading", { name: "Episode 0" }).click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
@@ -303,6 +317,16 @@ test("reviewer can approve an assigned task", async ({ page }) => {
     route.fulfill({ json: completedContext(reviewer.id) }),
   );
   let reviewDecision: string | undefined;
+  let reviewDraftBody: AnnotationPayload | undefined;
+  await page.route("**/api/v1/work-items/item-1/review-draft", async (route) => {
+    const body = route.request().postDataJSON() as { payload?: AnnotationPayload };
+    reviewDraftBody = body.payload;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...annotatorItem, status: "reviewing", reviewer_id: reviewer.id }),
+    });
+  });
   await page.route("**/api/v1/work-items/item-1/review", async (route) => {
     const body = route.request().postDataJSON() as { decision?: string };
     reviewDecision = body.decision;
@@ -323,7 +347,15 @@ test("reviewer can approve an assigned task", async ({ page }) => {
     "审核：审核员 @reviewer",
   );
   await expect(page.getByRole("button", { name: "审核通过" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "保存草稿" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "保存审核修改" })).toBeVisible();
+  await page.getByRole("textbox", { name: "物体名称", exact: true }).fill("新杯子");
+  await expect(page.getByText("审核修改未保存")).toBeVisible();
+  await expect(page.getByRole("button", { name: "审核通过" })).toBeDisabled();
+  await page.getByRole("button", { name: "确认审核修改" }).click();
+  await expect(page.getByRole("button", { name: "审核通过" })).toBeEnabled();
+  await page.getByRole("button", { name: "保存审核修改" }).click();
+  await expect.poll(() => reviewDraftBody?.segments?.[0]?.text).toContain("新杯子");
+  await expect(page.getByText("审核修改已保存")).toBeVisible();
   await page.getByRole("button", { name: "审核通过" }).click();
   await expect.poll(() => reviewDecision).toBe("approve");
   await expect(page).toHaveURL(/\/packages$/);
@@ -364,7 +396,7 @@ test("imported skill immediately previews its template and saves current input",
   await expect(page.getByRole("region", { name: "最终标注结果" })).toContainText("待填写：操作手");
   await page.getByRole("textbox", { name: "物体名称", exact: true }).fill("新杯子");
   await expect(preview).toContainText("新杯子");
-  await expect(preview.locator(".fine-preview-token-filled")).toContainText("【新杯子】");
+  await expect(preview.getByText("【新杯子】", { exact: true })).toHaveCount(3);
   await expect(preview.getByText("【物体名称】", { exact: true })).toHaveCount(0);
   await expect(page.locator(".timeline-segment")).toHaveText("1. 拾取 (Pick) · 成功");
   await page.screenshot({ path: testInfo.outputPath("current-template-preview.png") });

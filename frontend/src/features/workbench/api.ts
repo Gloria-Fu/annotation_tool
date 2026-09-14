@@ -37,6 +37,11 @@ export const workbenchApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  saveReviewDraft: (itemId: string, input: RevisionInput) =>
+    api<TaskItem>(`/work-items/${itemId}/review-draft`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
   revisionInput: (
     segments: import("../../shared/api/types").Segment[],
     revision?: RevisionSnapshot | null,

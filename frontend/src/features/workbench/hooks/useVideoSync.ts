@@ -103,6 +103,23 @@ export function useVideoSync(length: number, fps: number) {
     });
     setPlaying(false);
   }, []);
+  const pauseAtFrame = useCallback(
+    (frame: number) => {
+      playbackRange.current = null;
+      const bounded = clampFrame(frame, length);
+      currentFrameRef.current = bounded;
+      setCurrentFrame(bounded);
+      Object.values(videos.current).forEach((video) => {
+        if (!video) return;
+        pauseVideo(video);
+        if (Math.abs(video.currentTime - bounded / fps) > 0.08) {
+          video.currentTime = bounded / fps;
+        }
+      });
+      setPlaying(false);
+    },
+    [fps, length],
+  );
   const playSegment = useCallback(
     (startFrame: number, endFrame: number) => {
       const start = clampFrame(startFrame, length);
@@ -140,6 +157,7 @@ export function useVideoSync(length: number, fps: number) {
     playAll,
     playSegment,
     pauseAll,
+    pauseAtFrame,
     changeRate,
   };
 }

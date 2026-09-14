@@ -6,7 +6,12 @@ import {
   fineAnnotationText,
   templateIssues,
 } from "./fineAnnotation";
-import { SKILL_DEFINITIONS, sentenceTokens } from "../skillDefinitions";
+import {
+  SKILL_DEFINITIONS,
+  sentenceFieldValue,
+  sentenceTokens,
+  sentenceTokensForOutput,
+} from "../skillDefinitions";
 
 vi.mock("../enabledSkills", () => ({
   ENABLED_SKILLS: ["Pick", "Place", "Grasp", "Push", "Pull"],
@@ -194,8 +199,130 @@ it("ends Pick at holding and ignores obsolete movement fields", () => {
       position_end: "旧终点",
     },
   });
-  expect(text).toMatch(/夹持住物体。$/);
+  expect(text).toMatch(/夹持住【夹持物体】的【接触部位】。$/);
   expect(text).not.toContain("旧");
+});
+
+it("auto-fills repeated Pick object fields and allows overrides", () => {
+  const values = {
+    object_name: "茶叶罐",
+    pick_relative_object: "",
+    pick_grasped_object: "",
+    orientation: "垂直",
+    gripper_action: "闭合",
+    contact_point: "两侧",
+  };
+  const repeated = sentenceTokens("Pick", values).filter(
+    (token) =>
+      typeof token !== "string" &&
+      ["pick_relative_object", "pick_grasped_object"].includes(token.key),
+  );
+  expect(repeated).toHaveLength(2);
+  expect(
+    repeated.map((token) => (typeof token === "string" ? "" : sentenceFieldValue(token, values))),
+  ).toEqual(["茶叶罐", "茶叶罐"]);
+  expect(fineAnnotationText({ ...annotation, template_values: values })).toContain(
+    "夹爪以相对茶叶罐垂直的姿态，闭合夹爪，夹持住茶叶罐的两侧。",
+  );
+
+  const overridden = {
+    ...values,
+    pick_relative_object: "茶叶罐盖",
+    pick_grasped_object: "罐盖",
+  };
+  expect(fineAnnotationText({ ...annotation, template_values: overridden })).toContain(
+    "夹爪以相对茶叶罐盖垂直的姿态，闭合夹爪，夹持住罐盖的两侧。",
+  );
+});
+
+it("omits the optional Pick lift clause until one field is filled", () => {
+  const values = {
+    object_name: "茶叶罐",
+    orientation: "垂直",
+    gripper_action: "闭合",
+    contact_point: "两侧",
+  };
+  const baseText = fineAnnotationText({ ...annotation, template_values: values });
+  expect(baseText).toContain("夹持住茶叶罐的两侧。");
+  expect(baseText).not.toContain("移动至");
+  expect(
+    templateIssues({
+      id: "pick",
+      start_frame: 0,
+      end_frame: 10,
+      text: baseText,
+      fine_annotation: { ...annotation, template_values: values },
+    }),
+  ).not.toContain("抬起动作");
+
+  expect(
+    fineAnnotationText({ ...annotation, template_values: { ...values, lift_action: "向上抬起" } }),
+  ).toContain("夹持住茶叶罐的两侧，向上抬起。");
+  expect(
+    fineAnnotationText({ ...annotation, template_values: { ...values, lift_action: "向上抬起" } }),
+  ).not.toContain("移动至");
+
+  const withLift = {
+    ...values,
+    lift_action: "向上抬起",
+    lift_gripper: "右手夹爪",
+    lift_destination: "操作台上方",
+  };
+  expect(fineAnnotationText({ ...annotation, template_values: withLift })).toContain(
+    "夹持住茶叶罐的两侧，向上抬起右手夹爪，移动至操作台上方。",
+  );
+  expect(sentenceTokensForOutput("Pick", withLift).some((token) => token === "，移动至")).toBe(
+    true,
+  );
+});
+
+it("omits the optional Place lift clause until one field is filled", () => {
+  const values = {
+    operator_hand: "右手",
+    initial_position: "托盘前侧",
+    initial_state: "闭合",
+    object_name: "杯子",
+    approach: "托盘上方",
+    orientation: "垂直",
+    position_end: "托盘中央",
+    gripper_action: "张开",
+  };
+  const fine: FineAnnotation = {
+    ...annotation,
+    skill: "Place",
+    template_values: values,
+  };
+  const baseText = fineAnnotationText(fine);
+  expect(baseText).toContain("待其受到支撑后张开夹爪。");
+  expect(baseText).not.toContain("移动至");
+  expect(
+    templateIssues({
+      id: "place",
+      start_frame: 0,
+      end_frame: 10,
+      text: baseText,
+      fine_annotation: fine,
+    }),
+  ).not.toContain("抬起夹爪");
+
+  expect(
+    fineAnnotationText({
+      ...fine,
+      template_values: { ...values, lift_destination: "托盘右上方" },
+    }),
+  ).toContain("待其受到支撑后张开夹爪。移动至托盘右上方。");
+
+  expect(
+    fineAnnotationText({
+      ...fine,
+      template_values: {
+        ...values,
+        lift_gripper: "右手夹爪",
+        lift_action: "向上抬起",
+        lift_destination: "托盘右上方",
+      },
+    }),
+  ).toContain("待其受到支撑后张开夹爪。右手夹爪向上抬起。移动至托盘右上方。");
 });
 
 it("does not infer hand ownership from legacy Pick points", () => {

@@ -105,6 +105,30 @@ it("ignores stale native pause and play events", () => {
   expect(headPlayback.play).toHaveBeenCalledTimes(headPlaysBeforeStaleEvent);
 });
 
+it("pauses playback when jumping to a keyframe", () => {
+  const { result } = renderHook(() => useVideoSync(100, 10));
+  const head = document.createElement("video");
+  const side = document.createElement("video");
+  const headPlayback = mockVideoPlayback(head);
+  const sidePlayback = mockVideoPlayback(side);
+
+  act(() => {
+    result.current.registerVideo("head", head);
+    result.current.registerVideo("left", side);
+    result.current.playSegment(0, 50);
+  });
+  expect(result.current.playing).toBe(true);
+
+  act(() => result.current.pauseAtFrame(20));
+
+  expect(result.current.playing).toBe(false);
+  expect(result.current.currentFrame).toBe(20);
+  expect(head.currentTime).toBe(2);
+  expect(side.currentTime).toBe(2);
+  expect(headPlayback.pause).toHaveBeenCalled();
+  expect(sidePlayback.pause).toHaveBeenCalled();
+});
+
 it("keeps the video registration callback stable across frame updates", () => {
   const { result, rerender } = renderHook(() => useVideoSync(100, 10));
   const registerVideo = result.current.registerVideo;

@@ -51,6 +51,8 @@ export function WorkbenchPage() {
   const [clearOpen, setClearOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [revision, setRevision] = useState<WorkContext["latest_revision"]>(null);
+  const [reviewSaveError, setReviewSaveError] = useState<string | null>(null);
+  const [reviewDraftSaved, setReviewDraftSaved] = useState(false);
   const initialized = useRef(false);
   const pointMarkedCallback = useRef<
     ((point: NonNullable<FineAnnotation["keyframe_point"]>) => void) | undefined
@@ -105,6 +107,19 @@ export function WorkbenchPage() {
     },
     onError: (error: Error) => message.error(error.message),
   });
+  const saveReviewDraft = useMutation({
+    mutationFn: () =>
+      workbenchApi.saveReviewDraft(itemId, workbenchApi.revisionInput(state.segments, revision)),
+    onMutate: () => setReviewSaveError(null),
+    onSuccess: () => {
+      setDirty(false);
+      setRevision(null);
+      setReviewDraftSaved(true);
+      message.success("审核修改已保存");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workContext(itemId) });
+    },
+    onError: (error: Error) => setReviewSaveError(error.message),
+  });
   const clearServer = useMutation({
     mutationFn: () => workbenchApi.clear(itemId),
     onSuccess: () => {
@@ -146,6 +161,11 @@ export function WorkbenchPage() {
     },
     onError: (error: Error) => message.error(error.message),
   });
+  const markDirty = useCallback(() => {
+    setDirty(true);
+    setReviewDraftSaved(false);
+    setReviewSaveError(null);
+  }, []);
 
   const onFineChange = useCallback(
     (fine_annotation: FineAnnotation, text: string) => {
@@ -153,9 +173,9 @@ export function WorkbenchPage() {
       pointMarkedCallback.current = undefined;
       setPointMarking(false);
       dispatch({ type: "update-fine", id: selected.id, fine_annotation, text });
-      setDirty(true);
+      markDirty();
     },
-    [selected],
+    [markDirty, selected],
   );
   const split = useCallback(() => {
     if (!selected) {
@@ -169,11 +189,11 @@ export function WorkbenchPage() {
       videoSync.currentFrame < selected.end_frame
     ) {
       setSelectedId(newId);
-      setDirty(true);
+      markDirty();
     } else {
       message.info("请将播放头放在当前片段内部");
     }
-  }, [selected, videoSync.currentFrame]);
+  }, [markDirty, selected, videoSync.currentFrame]);
   const clear = useCallback(() => setClearOpen(true), []);
   const confirmClear = () => {
     dispatch({ type: "clear", length });
@@ -184,9 +204,9 @@ export function WorkbenchPage() {
   const onMoveBoundary = useCallback(
     (index: number, frame: number) => {
       dispatch({ type: "move-boundary", index, frame, length });
-      setDirty(true);
+      markDirty();
     },
-    [length],
+    [length, markDirty],
   );
   const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), []);
   const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), []);
@@ -230,9 +250,9 @@ export function WorkbenchPage() {
       )
         return;
       dispatch({ type: "merge", id: selected.id, direction });
-      setDirty(true);
+      markDirty();
     },
-    [selected, state.segments],
+    [markDirty, selected, state.segments],
   );
   const canCreateRetry =
     !!selected &&
@@ -245,9 +265,9 @@ export function WorkbenchPage() {
     const boundary = videoSync.currentFrame + 1;
     dispatch({ type: "create-retry", id: selected.id, frame: videoSync.currentFrame, newId });
     setSelectedId(newId);
-    setDirty(true);
+    markDirty();
     videoSync.playSegment(boundary, selected.end_frame);
-  }, [canCreateRetry, selected, videoSync]);
+  }, [canCreateRetry, markDirty, selected, videoSync]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -272,6 +292,16 @@ export function WorkbenchPage() {
         templateIssues(segment).length > 0 ||
         segment.annotation_status !== "confirmed",
     );
+  const reviewSaveState = saveReviewDraft.isPending
+    ? "保存审核修改中"
+    : reviewSaveError
+      ? `保存审核修改失败：${reviewSaveError}`
+      : dirty
+        ? "审核修改未保存"
+        : reviewDraftSaved
+          ? "审核修改已保存"
+          : "无待保存修改";
+  const headingSaveState = reviewing ? reviewSaveState : autosave.saveState;
   return (
     <div className="workbench-page">
       <PageHeading
@@ -299,10 +329,8 @@ export function WorkbenchPage() {
           </button>
         }
         action={
-          <Typography.Text
-            type={autosave.saveState.startsWith("保存失败") ? "danger" : "secondary"}
-          >
-            {autosave.saveState}
+          <Typography.Text type={headingSaveState.includes("失败") ? "danger" : "secondary"}>
+            {headingSaveState}
           </Typography.Text>
         }
       />
@@ -345,11 +373,11 @@ export function WorkbenchPage() {
             onRateChange={videoSync.changeRate}
             onUndo={() => {
               dispatch({ type: "undo" });
-              setDirty(true);
+              markDirty();
             }}
             onRedo={() => {
               dispatch({ type: "redo" });
-              setDirty(true);
+              markDirty();
             }}
             onSeek={videoSync.syncFrame}
             onPreviousSegment={() => navigateFromToolbar("previous")}
@@ -421,7 +449,7 @@ export function WorkbenchPage() {
               message.error("无法读取 HEAD 画面，请检查视频加载状态后重试");
             }
           }}
-          onJumpFrame={videoSync.syncFrame}
+          onJumpFrame={videoSync.pauseAtFrame}
           onBeginPointMark={(callback) => {
             if (
               !selected ||
@@ -436,13 +464,17 @@ export function WorkbenchPage() {
             setPointMarking(true);
           }}
           onFineChange={onFineChange}
-          onConfirm={() => selected && dispatch({ type: "confirm", id: selected.id })}
+          onConfirm={() => {
+            if (!selected) return;
+            dispatch({ type: "confirm", id: selected.id });
+            markDirty();
+          }}
           onNavigate={navigateSegment}
           onCreateRetry={createRetry}
-          onSave={() => saveDraft.mutate()}
+          onSave={() => (reviewing ? saveReviewDraft.mutate() : saveDraft.mutate())}
           onSubmit={() => submit.mutate()}
           onReview={(decision, comment) => review.mutate({ decision, comment })}
-          isSaving={saveDraft.isPending || autosave.isSaving}
+          isSaving={saveDraft.isPending || autosave.isSaving || saveReviewDraft.isPending}
           isSubmitting={submit.isPending || review.isPending}
           canSubmit={!submitDisabled}
           canCreateRetry={canCreateRetry}

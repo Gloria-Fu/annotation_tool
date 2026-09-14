@@ -34,6 +34,11 @@ const RETRY_RESET_KEYS = new Set([
   "orientation",
   "contact_point",
   "gripper_action",
+  "pick_relative_object",
+  "pick_grasped_object",
+  "lift_action",
+  "lift_gripper",
+  "lift_destination",
   "position_end",
   "retreat",
 ]);
