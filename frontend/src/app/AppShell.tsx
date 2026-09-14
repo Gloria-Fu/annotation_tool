@@ -4,13 +4,14 @@ import { Button, Layout, Menu, Select, Typography } from "antd";
 import {
   BarChart3,
   Boxes,
-  CheckCircle2,
   ClipboardCheck,
   Database,
   FileJson,
   FolderKanban,
   LogOut,
   PackageCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
   ShieldCheck,
   UserCog,
   Users,
@@ -21,6 +22,7 @@ import { PasswordGate } from "../features/auth/components/PasswordGate";
 import { projectsApi } from "../features/projects/api";
 import { roleLabels } from "../shared/constants/labels";
 import { queryKeys } from "../shared/queryKeys";
+import { brand } from "../shared/brand";
 import { ShellContext } from "./shellContext";
 import type { Role, User } from "../shared/api/types";
 
@@ -69,6 +71,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
   const [projectId, setProjectId] = useState<string | undefined>(
     () => localStorage.getItem("projectId") || undefined,
   );
+  const [navigationCollapsed, setNavigationCollapsed] = useState(false);
 
   useEffect(() => {
     if (projectId) localStorage.setItem("projectId", projectId);
@@ -91,12 +94,22 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
     <ShellContext.Provider value={{ user, projects, projectId: activeProjectId, setProjectId }}>
       <PasswordGate mustChangePassword={user.must_change_password} />
       <Layout className="app-shell">
-        <Sider width={224} breakpoint="lg" collapsedWidth="0">
-          <div className="app-logo">
-            <span className="app-logo-mark">
-              <CheckCircle2 />
+        <Sider
+          width={224}
+          breakpoint="lg"
+          collapsedWidth="0"
+          collapsed={navigationCollapsed}
+          trigger={null}
+          onBreakpoint={setNavigationCollapsed}
+        >
+          <div className="app-logo" aria-label={brand.name}>
+            <span className="app-logo-image">
+              <img src={brand.sidebarLogoUrl} alt={brand.logoAlt} />
             </span>
-            <span>标注管理平台</span>
+            <span className="app-logo-copy">
+              <strong>标注管理平台</strong>
+              <span>Annotation Workspace</span>
+            </span>
           </div>
           <Menu
             theme="dark"
@@ -109,6 +122,16 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
         <Layout>
           <Header className="app-header">
             <div className="header-left">
+              <Button
+                type="text"
+                className="nav-toggle"
+                aria-label={navigationCollapsed ? "展开导航栏" : "隐藏导航栏"}
+                title={navigationCollapsed ? "展开导航栏" : "隐藏导航栏"}
+                icon={
+                  navigationCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />
+                }
+                onClick={() => setNavigationCollapsed((collapsed) => !collapsed)}
+              />
               <Select
                 value={activeProjectId}
                 placeholder="选择项目"

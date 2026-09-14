@@ -13,9 +13,26 @@ export function AppProviders({ children }: { children: ReactNode }) {
       locale={zhCN}
       theme={{
         token: {
-          colorPrimary: "#176b5b",
+          colorPrimary: "#00b47d",
+          colorInfo: "#00b47d",
+          colorLink: "#008f68",
           borderRadius: 6,
           fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        },
+        components: {
+          Layout: {
+            bodyBg: "#f4f7f5",
+            headerBg: "#ffffff",
+            siderBg: "#16171a",
+          },
+          Menu: {
+            darkItemBg: "#16171a",
+            darkItemColor: "#b7c4be",
+            darkItemHoverBg: "rgba(255, 255, 255, 0.08)",
+            darkItemHoverColor: "#ffffff",
+            darkItemSelectedBg: "#00b47d",
+            darkItemSelectedColor: "#071f17",
+          },
         },
       }}
     >
