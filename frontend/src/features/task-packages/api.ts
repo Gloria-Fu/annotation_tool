@@ -1,13 +1,19 @@
 import { api } from "../../shared/api/client";
-import type { ItemStatus, Role, TaskItem, TaskPackage, User } from "../../shared/api/types";
+import type {
+  ItemStatus,
+  Role,
+  TaskItem,
+  TaskPackage,
+  User,
+  UserGroupSummary,
+} from "../../shared/api/types";
 
 export type PackageInput = {
   project_id: string;
   dataset_id: string;
   title: string;
   claim_policy: "sequential" | "random";
-  episode_start?: number;
-  episode_end?: number;
+  item_count: number;
 };
 
 export type MyTaskView = "pending" | "history";
@@ -18,6 +24,16 @@ export const taskPackagesApi = {
     api<TaskPackage>("/task-packages", { method: "POST", body: JSON.stringify(input) }),
   publish: (packageId: string) =>
     api<TaskPackage>(`/task-packages/${packageId}/publish`, { method: "POST" }),
+  groups: (packageId: string) => api<UserGroupSummary[]>(`/task-packages/${packageId}/groups`),
+  groupOptions: (packageId: string) =>
+    api<UserGroupSummary[]>(`/task-packages/${packageId}/group-options`),
+  addGroup: (packageId: string, groupId: string) =>
+    api<UserGroupSummary>(`/task-packages/${packageId}/groups`, {
+      method: "POST",
+      body: JSON.stringify({ group_id: groupId }),
+    }),
+  removeGroup: (packageId: string, groupId: string) =>
+    api<void>(`/task-packages/${packageId}/groups/${groupId}`, { method: "DELETE" }),
   items: (packageId: string, status?: ItemStatus) =>
     api<TaskItem[]>(`/task-packages/${packageId}/items${status ? `?status=${status}` : ""}`),
   claim: (packageId: string, review: boolean, claimPolicy?: "sequential" | "random") => {

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { Key } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Select, Table, Tag, message } from "antd";
-import { useParams } from "react-router-dom";
+import { Button, Select, Space, Table, Tag, message } from "antd";
+import { Eye } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { TaskItem, User } from "../../shared/api/types";
@@ -36,6 +37,7 @@ function renderAssignee(userId: string | null, users: User[]) {
 export function PackageItemsPage() {
   const { packageId = "" } = useParams();
   const { user } = useShell();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Key[]>([]);
   const [stage, setStage] = useState<"annotation" | "review">("annotation");
@@ -80,43 +82,53 @@ export function PackageItemsPage() {
     "reviewing",
   ];
   const canManage = user.role === "developer_admin" || user.role === "annotation_manager";
+  const canViewDetails = user.role === "outsourcing_manager";
 
   return (
     <>
-      <PageHeading title="任务条目" subtitle="选择待处理条目后可批量指派，已领取条目可手动回收" />
-      <div className="toolbar">
-        <Select
-          value={stage}
-          onChange={(value: "annotation" | "review") => {
-            setStage(value);
-            setAssignee(undefined);
-            setSelected([]);
-          }}
-          style={{ width: 130 }}
-          options={[
-            { value: "annotation", label: "标注阶段" },
-            { value: "review", label: "审核阶段" },
-          ]}
-        />
-        <Select
-          value={assignee}
-          onChange={setAssignee}
-          placeholder="选择人员"
-          style={{ width: 220 }}
-          options={assignableUsers.map((candidate) => ({
-            value: candidate.id,
-            label: `${candidate.display_name}（${candidate.username}）`,
-          }))}
-        />
-        <Button
-          type="primary"
-          disabled={!selected.length || !assignee}
-          loading={assign.isPending}
-          onClick={() => assign.mutate()}
-        >
-          批量指派 ({selected.length})
-        </Button>
-      </div>
+      <PageHeading
+        title="任务条目"
+        subtitle={
+          canManage
+            ? "选择待处理条目后可批量指派，已领取条目可手动回收"
+            : "查看任务包内每个 episode 的标注进度和处理结果"
+        }
+      />
+      {canManage && (
+        <div className="toolbar">
+          <Select
+            value={stage}
+            onChange={(value: "annotation" | "review") => {
+              setStage(value);
+              setAssignee(undefined);
+              setSelected([]);
+            }}
+            style={{ width: 130 }}
+            options={[
+              { value: "annotation", label: "标注阶段" },
+              { value: "review", label: "审核阶段" },
+            ]}
+          />
+          <Select
+            value={assignee}
+            onChange={setAssignee}
+            placeholder="选择人员"
+            style={{ width: 220 }}
+            options={assignableUsers.map((candidate) => ({
+              value: candidate.id,
+              label: `${candidate.display_name}（${candidate.username}）`,
+            }))}
+          />
+          <Button
+            type="primary"
+            disabled={!selected.length || !assignee}
+            loading={assign.isPending}
+            onClick={() => assign.mutate()}
+          >
+            批量指派 ({selected.length})
+          </Button>
+        </div>
+      )}
       <div className="table-panel">
         <Table<TaskItem>
           rowKey="id"
@@ -155,14 +167,26 @@ export function PackageItemsPage() {
             },
             {
               title: "操作",
-              render: (_, row) =>
-                canManage && reclaimable.includes(row.status) ? (
-                  <Button size="small" danger onClick={() => reclaim.mutate(row.id)}>
-                    回收
-                  </Button>
-                ) : (
-                  "-"
-                ),
+              render: (_, row) => (
+                <Space>
+                  {canViewDetails && (
+                    <Button
+                      size="small"
+                      icon={<Eye size={14} />}
+                      onClick={() => void navigate(`/work/${row.id}`)}
+                    >
+                      查看详情
+                    </Button>
+                  )}
+                  {canManage && reclaimable.includes(row.status) ? (
+                    <Button size="small" danger onClick={() => reclaim.mutate(row.id)}>
+                      回收
+                    </Button>
+                  ) : (
+                    !canViewDetails && "-"
+                  )}
+                </Space>
+              ),
             },
           ]}
         />

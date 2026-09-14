@@ -43,6 +43,7 @@ function initialSegments(context: WorkContext): Segment[] {
 export function WorkbenchPage() {
   const { itemId = "" } = useParams();
   const { user } = useShell();
+  const readOnly = user.role === "outsourcing_manager";
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(segmentReducer, [], () => createWorkbenchState());
@@ -84,6 +85,7 @@ export function WorkbenchPage() {
     segments: state.segments,
     dirty,
     disabled:
+      readOnly ||
       reviewing ||
       state.segments.some((segment) => {
         const skill = segment.fine_annotation?.skill || segment.skill;
@@ -162,22 +164,24 @@ export function WorkbenchPage() {
     onError: (error: Error) => message.error(error.message),
   });
   const markDirty = useCallback(() => {
+    if (readOnly) return;
     setDirty(true);
     setReviewDraftSaved(false);
     setReviewSaveError(null);
-  }, []);
+  }, [readOnly]);
 
   const onFineChange = useCallback(
     (fine_annotation: FineAnnotation, text: string) => {
-      if (!selected) return;
+      if (readOnly || !selected) return;
       pointMarkedCallback.current = undefined;
       setPointMarking(false);
       dispatch({ type: "update-fine", id: selected.id, fine_annotation, text });
       markDirty();
     },
-    [markDirty, selected],
+    [markDirty, readOnly, selected],
   );
   const split = useCallback(() => {
+    if (readOnly) return;
     if (!selected) {
       message.info("请先选择一个标注段");
       return;
@@ -193,9 +197,12 @@ export function WorkbenchPage() {
     } else {
       message.info("请将播放头放在当前片段内部");
     }
-  }, [markDirty, selected, videoSync.currentFrame]);
-  const clear = useCallback(() => setClearOpen(true), []);
+  }, [markDirty, readOnly, selected, videoSync.currentFrame]);
+  const clear = useCallback(() => {
+    if (!readOnly) setClearOpen(true);
+  }, [readOnly]);
   const confirmClear = () => {
+    if (readOnly) return;
     dispatch({ type: "clear", length });
     setSelectedId("segment-1");
     setDirty(false);
@@ -203,10 +210,11 @@ export function WorkbenchPage() {
   };
   const onMoveBoundary = useCallback(
     (index: number, frame: number) => {
+      if (readOnly) return;
       dispatch({ type: "move-boundary", index, frame, length });
       markDirty();
     },
-    [length, markDirty],
+    [length, markDirty, readOnly],
   );
   const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), []);
   const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), []);
@@ -242,6 +250,7 @@ export function WorkbenchPage() {
   );
   const mergeSelected = useCallback(
     (direction: "previous" | "next") => {
+      if (readOnly) return;
       if (!selected) return;
       const index = state.segments.findIndex((segment) => segment.id === selected.id);
       if (
@@ -252,7 +261,7 @@ export function WorkbenchPage() {
       dispatch({ type: "merge", id: selected.id, direction });
       markDirty();
     },
-    [markDirty, selected, state.segments],
+    [markDirty, readOnly, selected, state.segments],
   );
   const canCreateRetry =
     !!selected &&
@@ -260,14 +269,14 @@ export function WorkbenchPage() {
     videoSync.currentFrame >= selected.start_frame &&
     videoSync.currentFrame < selected.end_frame - 1;
   const createRetry = useCallback(() => {
-    if (!selected || !canCreateRetry) return;
+    if (readOnly || !selected || !canCreateRetry) return;
     const newId = `${selected.id}-retry-${Date.now()}`;
     const boundary = videoSync.currentFrame + 1;
     dispatch({ type: "create-retry", id: selected.id, frame: videoSync.currentFrame, newId });
     setSelectedId(newId);
     markDirty();
     videoSync.playSegment(boundary, selected.end_frame);
-  }, [canCreateRetry, markDirty, selected, videoSync]);
+  }, [canCreateRetry, markDirty, readOnly, selected, videoSync]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -301,7 +310,7 @@ export function WorkbenchPage() {
         : reviewDraftSaved
           ? "审核修改已保存"
           : "无待保存修改";
-  const headingSaveState = reviewing ? reviewSaveState : autosave.saveState;
+  const headingSaveState = readOnly ? "只读查看" : reviewing ? reviewSaveState : autosave.saveState;
   return (
     <div className="workbench-page">
       <PageHeading
@@ -391,6 +400,7 @@ export function WorkbenchPage() {
               state.segments.findIndex((segment) => segment.id === selected.id) <
                 state.segments.length - 1
             }
+            readOnly={readOnly}
           />
           <Timeline
             segments={state.segments}
@@ -405,6 +415,7 @@ export function WorkbenchPage() {
             onBoundaryDragStart={onBoundaryDragStart}
             onBoundaryDragEnd={onBoundaryDragEnd}
             onInteractionStart={videoSync.pauseAll}
+            readOnly={readOnly}
           />
         </section>
         <SegmentEditor
@@ -480,6 +491,7 @@ export function WorkbenchPage() {
           canCreateRetry={canCreateRetry}
           reviewReason={context.review_comment}
           qualityReason={context.quality_comment}
+          readOnly={readOnly}
         />
       </div>
       {gripperSession && (

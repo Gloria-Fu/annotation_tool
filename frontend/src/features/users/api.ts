@@ -7,6 +7,7 @@ export type UserInput = {
   password: string;
   role: Role;
   project_ids: string[];
+  group_ids?: string[];
 };
 
 export const usersApi = {

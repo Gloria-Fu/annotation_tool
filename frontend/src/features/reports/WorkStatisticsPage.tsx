@@ -27,8 +27,6 @@ type DateRange = [Dayjs, Dayjs];
 const roleOptions: { value: Role; label: string }[] = [
   { value: "annotator", label: roleLabels.annotator },
   { value: "reviewer", label: roleLabels.reviewer },
-  { value: "annotation_manager", label: roleLabels.annotation_manager },
-  { value: "developer_admin", label: roleLabels.developer_admin },
 ];
 
 function initialRange(): DateRange {
@@ -395,7 +393,11 @@ function PeopleWorkStatisticsPage() {
 
 export function WorkStatisticsPage() {
   const { user } = useShell();
-  if (user.role === "developer_admin" || user.role === "annotation_manager") {
+  if (
+    user.role === "developer_admin" ||
+    user.role === "annotation_manager" ||
+    user.role === "outsourcing_manager"
+  ) {
     return <PeopleWorkStatisticsPage />;
   }
   return <PersonalWorkStatisticsPage />;

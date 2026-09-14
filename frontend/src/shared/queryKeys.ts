@@ -2,9 +2,12 @@ export const queryKeys = {
   me: ["me"] as const,
   projects: ["projects"] as const,
   users: ["users"] as const,
+  userGroups: ["user-groups"] as const,
   datasetsRoot: ["datasets"] as const,
   datasets: (projectId?: string) => ["datasets", projectId] as const,
   packages: (projectId?: string) => ["packages", projectId] as const,
+  packageGroups: (packageId: string) => ["package-groups", packageId] as const,
+  packageGroupOptions: (packageId: string) => ["package-group-options", packageId] as const,
   packageItems: (packageId: string) => ["package-items", packageId] as const,
   myTasksRoot: (review: boolean) => ["my-tasks", review] as const,
   myTasks: (review: boolean, view: "pending" | "history" = "pending") =>

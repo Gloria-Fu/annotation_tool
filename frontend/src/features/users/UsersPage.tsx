@@ -8,6 +8,7 @@ import type { Role, User } from "../../shared/api/types";
 import { roleLabels } from "../../shared/constants/labels";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
+import { userGroupsApi } from "../user-groups/api";
 import { usersApi, type UserInput } from "./api";
 
 type UserFormInput = Omit<UserInput, "project_ids"> & { project_ids?: string[] };
@@ -18,15 +19,24 @@ export function UsersPage() {
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const { data = [] } = useQuery({ queryKey: queryKeys.users, queryFn: usersApi.list });
+  const { data: groups = [] } = useQuery({
+    queryKey: queryKeys.userGroups,
+    queryFn: userGroupsApi.list,
+    enabled: user.role === "developer_admin" || user.role === "outsourcing_manager",
+  });
   const create = useMutation({
     mutationFn: (input: UserFormInput) =>
       usersApi.create({
         ...input,
-        project_ids: input.project_ids || (projectId ? [projectId] : []),
+        project_ids:
+          user.role === "outsourcing_manager"
+            ? []
+            : input.project_ids || (projectId ? [projectId] : []),
       }),
     onSuccess: () => {
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.userGroups });
     },
     onError: (error: ApiError) => message.error(error.message),
   });
@@ -41,6 +51,7 @@ export function UsersPage() {
     onSuccess: () => {
       message.success("账号已删除");
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.userGroups });
     },
     onError: (error: ApiError) => message.error(error.message),
   });
@@ -51,6 +62,7 @@ export function UsersPage() {
           { value: "annotator", label: roleLabels.annotator },
           { value: "reviewer", label: roleLabels.reviewer },
         ];
+  const isOutsourcingManager = user.role === "outsourcing_manager";
 
   return (
     <>
@@ -129,12 +141,28 @@ export function UsersPage() {
           <Form.Item name="role" label="角色">
             <Select options={roles} />
           </Form.Item>
-          <Form.Item name="project_ids" label="所属项目">
-            <Select
-              mode="multiple"
-              options={projects.map((project) => ({ value: project.id, label: project.name }))}
-            />
-          </Form.Item>
+          {isOutsourcingManager ? (
+            <Form.Item
+              name="group_ids"
+              label="所属群组"
+              rules={[{ required: true, message: "请选择负责的群组" }]}
+            >
+              <Select
+                mode="multiple"
+                options={groups.map((group) => ({
+                  value: group.id,
+                  label: `${group.name} · ${group.member_count} 人`,
+                }))}
+              />
+            </Form.Item>
+          ) : (
+            <Form.Item name="project_ids" label="所属项目">
+              <Select
+                mode="multiple"
+                options={projects.map((project) => ({ value: project.id, label: project.name }))}
+              />
+            </Form.Item>
+          )}
           <Button type="primary" htmlType="submit" loading={create.isPending}>
             创建
           </Button>

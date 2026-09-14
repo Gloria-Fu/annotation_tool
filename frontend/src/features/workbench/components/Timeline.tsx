@@ -17,6 +17,7 @@ export function Timeline({
   onBoundaryDragStart,
   onBoundaryDragEnd,
   onInteractionStart,
+  readOnly,
 }: {
   segments: Segment[];
   selectedId?: string;
@@ -30,6 +31,7 @@ export function Timeline({
   onBoundaryDragStart: () => void;
   onBoundaryDragEnd: () => void;
   onInteractionStart: () => void;
+  readOnly?: boolean;
 }) {
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ index: number } | null>(null);
@@ -148,6 +150,7 @@ export function Timeline({
                 aria-label="拖动调整片段分界"
                 onPointerDown={(event) => {
                   event.stopPropagation();
+                  if (readOnly) return;
                   onInteractionStart();
                   onBoundaryDragStart();
                   dragRef.current = { index };

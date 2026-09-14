@@ -41,6 +41,7 @@ export function SegmentEditor({
   canCreateRetry,
   reviewReason,
   qualityReason,
+  readOnly,
 }: {
   selected?: Segment;
   reviewing: boolean;
@@ -64,6 +65,7 @@ export function SegmentEditor({
   canCreateRetry: boolean;
   reviewReason?: string | null;
   qualityReason?: string | null;
+  readOnly?: boolean;
 }) {
   const [reviewComment, setReviewComment] = useState("");
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -81,7 +83,7 @@ export function SegmentEditor({
     onFineChange(next, fineAnnotationText(next));
   };
   const definition = getSkillDefinition(fine.skill || selected.skill || "");
-  const enabled = isSkillEnabled(fine.skill || selected.skill || "");
+  const enabled = !readOnly && isSkillEnabled(fine.skill || selected.skill || "");
   const values = fine.template_values || {};
   const issues = templateIssues(selected);
   const updateValue = (key: string, value: string) =>
@@ -130,7 +132,9 @@ export function SegmentEditor({
     <aside className="segment-editor">
       <div className="editor-heading">
         <Typography.Title level={4}>精细标注</Typography.Title>
-        <Tag color={reviewing ? "gold" : "blue"}>{reviewing ? "待审核" : "编辑中"}</Tag>
+        <Tag color={readOnly ? "default" : reviewing ? "gold" : "blue"}>
+          {readOnly ? "只读查看" : reviewing ? "待审核" : "编辑中"}
+        </Tag>
       </div>
       <section className="editor-result" aria-label="最终标注结果">
         <div className="editor-result-heading">
@@ -213,7 +217,7 @@ export function SegmentEditor({
             placeholder="选择技能"
           />
         </label>
-        {!enabled && (
+        {!readOnly && !enabled && (
           <Typography.Text type="warning">
             {fine.skill || selected.skill ? "该 Skill 暂未开放，请选择其他技能" : "请选择技能"}
           </Typography.Text>

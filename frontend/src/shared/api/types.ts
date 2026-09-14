@@ -2,6 +2,9 @@ import type { components } from "./generated";
 
 export type Role = components["schemas"]["Role"];
 export type User = components["schemas"]["UserOut"];
+export type UserGroup = components["schemas"]["UserGroupOut"];
+export type UserGroupMember = components["schemas"]["UserGroupMemberOut"];
+export type UserGroupSummary = components["schemas"]["UserGroupSummaryOut"];
 export type Project = components["schemas"]["ProjectOut"];
 export type Dataset = components["schemas"]["DatasetOut"];
 export type TaskPackage = components["schemas"]["PackageOut"] & {

@@ -13,11 +13,11 @@ import {
   Tag,
   message,
 } from "antd";
-import { Boxes, Play, Plus } from "lucide-react";
+import { Boxes, Play, Plus, UserRoundMinus, UsersRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
-import type { Dataset, TaskPackage } from "../../shared/api/types";
+import type { Dataset, TaskPackage, UserGroupSummary } from "../../shared/api/types";
 import { statusLabels } from "../../shared/constants/labels";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
@@ -38,16 +38,18 @@ export function PackagesPage() {
   } | null>(null);
   const [reviewClaimTarget, setReviewClaimTarget] = useState<TaskPackage | null>(null);
   const [reviewClaimPolicy, setReviewClaimPolicy] = useState<"sequential" | "random">("sequential");
+  const [groupTarget, setGroupTarget] = useState<TaskPackage | null>(null);
   const { data: packages = [] } = useQuery({
     queryKey: queryKeys.packages(projectId),
     queryFn: () => taskPackagesApi.list(projectId as string),
     enabled: !!projectId,
   });
-  const isManager = user.role === "developer_admin" || user.role === "annotation_manager";
+  const canManagePackages = user.role === "developer_admin" || user.role === "annotation_manager";
+  const canViewPackageItems = canManagePackages || user.role === "outsourcing_manager";
   const { data: datasets = [] } = useQuery({
     queryKey: queryKeys.datasets(projectId),
     queryFn: () => datasetsApi.list(projectId as string),
-    enabled: !!projectId && isManager,
+    enabled: !!projectId && canManagePackages,
   });
   const create = useMutation({
     mutationFn: (values: PackageFormValues) =>
@@ -88,14 +90,55 @@ export function PackagesPage() {
       }),
   });
   const isReview = user.role === "reviewer";
+  const { data: packageGroups = [] } = useQuery({
+    queryKey: queryKeys.packageGroups(groupTarget?.id || ""),
+    queryFn: () => taskPackagesApi.groups(groupTarget?.id as string),
+    enabled: canManagePackages && !!groupTarget,
+  });
+  const { data: groupOptions = [] } = useQuery({
+    queryKey: queryKeys.packageGroupOptions(groupTarget?.id || ""),
+    queryFn: () => taskPackagesApi.groupOptions(groupTarget?.id as string),
+    enabled: canManagePackages && !!groupTarget,
+  });
+  const groupModeEnabled = Boolean(groupTarget?.group_access_configured || packageGroups.length);
+  const addGroup = useMutation({
+    mutationFn: (groupId: string) => taskPackagesApi.addGroup(groupTarget?.id as string, groupId),
+    onSuccess: () => {
+      message.success("授权群组已添加");
+      setGroupTarget((target) => (target ? { ...target, group_access_configured: true } : target));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.packages(projectId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.packageGroups(groupTarget?.id || ""),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.packageGroupOptions(groupTarget?.id || ""),
+      });
+    },
+    onError: (error: ApiError) => message.error(error.message),
+  });
+  const removeGroup = useMutation({
+    mutationFn: (groupId: string) =>
+      taskPackagesApi.removeGroup(groupTarget?.id as string, groupId),
+    onSuccess: () => {
+      message.success("授权群组已移除");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.packages(projectId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.packageGroups(groupTarget?.id || ""),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.packageGroupOptions(groupTarget?.id || ""),
+      });
+    },
+    onError: (error: ApiError) => message.error(error.message),
+  });
 
   return (
     <>
       <PageHeading
         title="任务包"
-        subtitle="每个任务条目对应一个 LeRobot episode，任务包权限由项目成员关系决定"
+        subtitle="每个任务条目对应一个 LeRobot episode，可按项目成员或授权群组开放"
         action={
-          isManager ? (
+          canManagePackages ? (
             <Button type="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>
               创建任务包
             </Button>
@@ -128,39 +171,68 @@ export function PackagesPage() {
                 `总数 ${row.total_items} · 已领取 ${row.claimed_items} · 已标注 ${row.annotated_items} · 已审核 ${row.reviewed_items}`,
             },
             {
+              title: "访问范围",
+              render: (_, row) =>
+                row.group_access_configured ? (
+                  row.authorized_groups.length ? (
+                    <Space wrap size={[4, 4]}>
+                      {row.authorized_groups.map((group: UserGroupSummary) => (
+                        <Tag color="blue" key={group.id}>
+                          {group.name} · {group.member_count}
+                        </Tag>
+                      ))}
+                    </Space>
+                  ) : (
+                    <Tag color="orange">群组模式，暂无授权</Tag>
+                  )
+                ) : (
+                  <Tag>项目成员</Tag>
+                ),
+            },
+            {
               title: "操作",
               render: (_, row) => (
                 <Space>
-                  {isManager && row.status === "draft" && (
+                  {canManagePackages && row.status === "draft" && (
                     <Button size="small" onClick={() => publish.mutate(row.id)}>
                       发布
                     </Button>
                   )}
-                  {row.status === "published" && user.role !== "developer_admin" && (
+                  {row.status === "published" &&
+                    (user.role === "annotator" || user.role === "reviewer") && (
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<Play size={14} />}
+                        loading={claim.isPending}
+                        onClick={() => {
+                          if (isReview) {
+                            setReviewClaimPolicy("sequential");
+                            setReviewClaimTarget(row);
+                          } else {
+                            claim.mutate({ id: row.id, review: false });
+                          }
+                        }}
+                      >
+                        领取{isReview ? "审核" : "标注"}
+                      </Button>
+                    )}
+                  {canManagePackages && (
                     <Button
-                      type="primary"
                       size="small"
-                      icon={<Play size={14} />}
-                      loading={claim.isPending}
-                      onClick={() => {
-                        if (isReview) {
-                          setReviewClaimPolicy("sequential");
-                          setReviewClaimTarget(row);
-                        } else {
-                          claim.mutate({ id: row.id, review: false });
-                        }
-                      }}
+                      icon={<UsersRound size={14} />}
+                      onClick={() => setGroupTarget(row)}
                     >
-                      领取{isReview ? "审核" : "标注"}
+                      授权群组
                     </Button>
                   )}
-                  {isManager && (
+                  {canViewPackageItems && (
                     <Button
                       size="small"
                       icon={<Boxes size={14} />}
                       onClick={() => void navigate(`/packages/${row.id}`)}
                     >
-                      管理条目
+                      {canManagePackages ? "管理条目" : "查看标注"}
                     </Button>
                   )}
                 </Space>
@@ -169,10 +241,50 @@ export function PackagesPage() {
           ]}
         />
       </div>
+      <Modal
+        open={!!groupTarget}
+        title={groupTarget ? `授权群组 · ${groupTarget.title}` : "授权群组"}
+        footer={null}
+        onCancel={() => setGroupTarget(null)}
+      >
+        <Select
+          showSearch
+          placeholder="选择要授权的群组"
+          style={{ width: "100%" }}
+          options={groupOptions.map((group) => ({
+            value: group.id,
+            label: `${group.name} · ${group.member_count} 人`,
+          }))}
+          onChange={(groupId: string) => addGroup.mutate(groupId)}
+          value={undefined}
+          loading={addGroup.isPending}
+        />
+        <div className="muted-help" style={{ marginTop: 12 }}>
+          {groupModeEnabled
+            ? "已进入群组授权模式。移除全部群组后，任务包不会自动恢复为项目成员可见。"
+            : "添加第一个群组后，任务包将切换为群组授权模式。"}
+        </div>
+        <Space wrap style={{ marginTop: 16 }}>
+          {packageGroups.map((group) => (
+            <Tag
+              color="blue"
+              key={group.id}
+              closable
+              closeIcon={<UserRoundMinus size={12} />}
+              onClose={(event) => {
+                event.preventDefault();
+                removeGroup.mutate(group.id);
+              }}
+            >
+              {group.name} · {group.member_count} 人
+            </Tag>
+          ))}
+        </Space>
+      </Modal>
       <Modal open={open} title="创建任务包" footer={null} onCancel={() => setOpen(false)}>
         <Form<PackageFormValues>
           layout="vertical"
-          initialValues={{ claim_policy: "sequential" }}
+          initialValues={{ claim_policy: "sequential", item_count: 20 }}
           onFinish={(values) => create.mutate(values)}
         >
           <Form.Item name="title" label="标题" rules={[{ required: true }]}>
@@ -188,22 +300,17 @@ export function PackagesPage() {
                 }))}
             />
           </Form.Item>
-          <Form.Item name="claim_policy" label="领取顺序">
+          <Form.Item name="item_count" label="任务数量" rules={[{ required: true }]}>
+            <InputNumber min={1} max={100000} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="claim_policy" label="分配方式">
             <Select
               options={[
                 { value: "sequential", label: "按 episode 顺序" },
-                { value: "random", label: "固定随机顺序" },
+                { value: "random", label: "随机抽取" },
               ]}
             />
           </Form.Item>
-          <Space>
-            <Form.Item name="episode_start" label="起始 episode">
-              <InputNumber min={0} />
-            </Form.Item>
-            <Form.Item name="episode_end" label="结束 episode">
-              <InputNumber min={0} />
-            </Form.Item>
-          </Space>
           <Button type="primary" htmlType="submit" loading={create.isPending}>
             创建草稿
           </Button>

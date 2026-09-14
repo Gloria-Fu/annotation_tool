@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   UserCog,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "../features/auth/api";
@@ -34,6 +35,7 @@ const menuByRole: Record<Role, { key: string; label: string; icon: ReactNode }[]
     { key: "/work-statistics", label: "人员统计", icon: <BarChart3 size={18} /> },
     { key: "/projects", label: "项目管理", icon: <FolderKanban size={18} /> },
     { key: "/users", label: "账号管理", icon: <Users size={18} /> },
+    { key: "/groups", label: "人员群组", icon: <UsersRound size={18} /> },
     { key: "/datasets", label: "数据导入", icon: <Database size={18} /> },
     { key: "/packages", label: "任务包", icon: <Boxes size={18} /> },
     { key: "/quality", label: "质量抽检", icon: <ShieldCheck size={18} /> },
@@ -47,6 +49,12 @@ const menuByRole: Record<Role, { key: string; label: string; icon: ReactNode }[]
     { key: "/my-work", label: "我的工作量", icon: <BarChart3 size={18} /> },
     { key: "/my-tasks", label: "我的标注", icon: <FileJson size={18} /> },
     { key: "/reviews", label: "我的审核", icon: <ClipboardCheck size={18} /> },
+  ],
+  outsourcing_manager: [
+    { key: "/packages", label: "任务包", icon: <PackageCheck size={18} /> },
+    { key: "/users", label: "人员管理", icon: <Users size={18} /> },
+    { key: "/groups", label: "人员群组", icon: <UsersRound size={18} /> },
+    { key: "/work-statistics", label: "人员统计", icon: <BarChart3 size={18} /> },
   ],
   reviewer: [
     { key: "/packages", label: "审核任务包", icon: <PackageCheck size={18} /> },

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 const roles = [
   { role: "developer_admin", home: "/dashboard" },
   { role: "annotation_manager", home: "/dashboard" },
+  { role: "outsourcing_manager", home: "/packages" },
   { role: "reviewer", home: "/packages" },
   { role: "annotator", home: "/packages" },
 ] as const;

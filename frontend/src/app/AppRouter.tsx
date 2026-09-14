@@ -11,12 +11,16 @@ import { MyTasksPage } from "../features/task-packages/MyTasksPage";
 import { PackageItemsPage } from "../features/task-packages/PackageItemsPage";
 import { PackagesPage } from "../features/task-packages/PackagesPage";
 import { UsersPage } from "../features/users/UsersPage";
+import { UserGroupsPage } from "../features/user-groups/UserGroupsPage";
 import { WorkbenchPage } from "../features/workbench/WorkbenchPage";
 import { MyWorkStatisticsPage, WorkStatisticsPage } from "../features/reports/WorkStatisticsPage";
 import type { User } from "../shared/api/types";
 
 function AuthenticatedRoutes({ user }: { user: User }) {
-  const home = user.role === "annotator" || user.role === "reviewer" ? "/packages" : "/dashboard";
+  const home =
+    user.role === "annotator" || user.role === "reviewer" || user.role === "outsourcing_manager"
+      ? "/packages"
+      : "/dashboard";
   return (
     <AppShell user={user}>
       <Routes>
@@ -26,6 +30,16 @@ function AuthenticatedRoutes({ user }: { user: User }) {
         <Route path="/my-work" element={<MyWorkStatisticsPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route
+          path="/groups"
+          element={
+            user.role === "developer_admin" || user.role === "outsourcing_manager" ? (
+              <UserGroupsPage />
+            ) : (
+              <Navigate to={home} replace />
+            )
+          }
+        />
         <Route path="/datasets" element={<DatasetsPage />} />
         <Route path="/packages" element={<PackagesPage />} />
         <Route path="/packages/:packageId" element={<PackageItemsPage />} />

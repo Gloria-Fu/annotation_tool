@@ -33,6 +33,7 @@ export function WorkbenchToolbar({
   onMerge,
   canMergePrevious,
   canMergeNext,
+  readOnly,
 }: {
   currentFrame: number;
   length: number;
@@ -53,41 +54,46 @@ export function WorkbenchToolbar({
   onMerge: (direction: "previous" | "next") => void;
   canMergePrevious: boolean;
   canMergeNext: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <div className="annotation-toolbar">
-      <Button icon={<Scissors size={15} />} onClick={onSplit}>
-        分段
-      </Button>
-      <Button icon={<Eraser size={15} />} onClick={onClear} title="一键清空当前任务的全部标注">
-        清空全部标注
-      </Button>
-      <Dropdown
-        trigger={["click"]}
-        menu={{
-          items: [
-            {
-              key: "previous",
-              label: "与上一段合并",
-              disabled: !canMergePrevious,
-              icon: <ChevronLeft size={15} />,
-            },
-            {
-              key: "next",
-              label: "与下一段合并",
-              disabled: !canMergeNext,
-              icon: <ChevronRight size={15} />,
-            },
-          ],
-          onClick: ({ key }) => {
-            if (key === "previous" || key === "next") onMerge(key);
-          },
-        }}
-      >
-        <Button icon={<Merge size={15} />} disabled={!canMergePrevious && !canMergeNext}>
-          合并片段
-        </Button>
-      </Dropdown>
+      {!readOnly && (
+        <>
+          <Button icon={<Scissors size={15} />} onClick={onSplit}>
+            分段
+          </Button>
+          <Button icon={<Eraser size={15} />} onClick={onClear} title="一键清空当前任务的全部标注">
+            清空全部标注
+          </Button>
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                {
+                  key: "previous",
+                  label: "与上一段合并",
+                  disabled: !canMergePrevious,
+                  icon: <ChevronLeft size={15} />,
+                },
+                {
+                  key: "next",
+                  label: "与下一段合并",
+                  disabled: !canMergeNext,
+                  icon: <ChevronRight size={15} />,
+                },
+              ],
+              onClick: ({ key }) => {
+                if (key === "previous" || key === "next") onMerge(key);
+              },
+            }}
+          >
+            <Button icon={<Merge size={15} />} disabled={!canMergePrevious && !canMergeNext}>
+              合并片段
+            </Button>
+          </Dropdown>
+        </>
+      )}
       <Button
         icon={<ZoomOut size={15} />}
         onClick={() => onZoomChange(Math.max(0.5, zoom - 0.25))}

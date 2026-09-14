@@ -247,6 +247,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/task-packages/{package_id}/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Package Groups */
+        get: operations["list_package_groups_api_v1_task_packages__package_id__groups_get"];
+        put?: never;
+        /** Add Package Group */
+        post: operations["add_package_group_api_v1_task_packages__package_id__groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/task-packages/{package_id}/group-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Group Options */
+        get: operations["list_group_options_api_v1_task_packages__package_id__group_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/task-packages/{package_id}/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Package Group */
+        delete: operations["remove_package_group_api_v1_task_packages__package_id__groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/task-packages/{package_id}/items": {
         parameters: {
             query?: never;
@@ -344,6 +396,76 @@ export interface paths {
         /** Reclaim Item */
         post: operations["reclaim_item_api_v1_task_items__item_id__reclaim_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Groups */
+        get: operations["list_groups_api_v1_user_groups_get"];
+        put?: never;
+        /** Create Group */
+        post: operations["create_group_api_v1_user_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Group */
+        delete: operations["delete_group_api_v1_user_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Group */
+        patch: operations["update_group_api_v1_user_groups__group_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/user-groups/{group_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Member */
+        post: operations["add_member_api_v1_user_groups__group_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user-groups/{group_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Member */
+        delete: operations["remove_member_api_v1_user_groups__group_id__members__user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -780,13 +902,30 @@ export interface components {
             description?: string | null;
             /** @default sequential */
             claim_policy: components["schemas"]["ClaimPolicy"];
+            /**
+             * Item Count
+             * @description 本次任务包创建的条目数量；新客户端应始终传入。
+             */
+            item_count?: number | null;
             /** Random Seed */
             random_seed?: number | null;
-            /** Episode Indices */
+            /**
+             * Episode Indices
+             * @deprecated
+             * @description 已废弃。旧客户端可继续使用，服务端会从其中排除已分配 episode。
+             */
             episode_indices?: number[] | null;
-            /** Episode Start */
+            /**
+             * Episode Start
+             * @deprecated
+             * @description 已废弃。新客户端请改用 item_count。
+             */
             episode_start?: number | null;
-            /** Episode End */
+            /**
+             * Episode End
+             * @deprecated
+             * @description 已废弃。新客户端请改用 item_count。
+             */
             episode_end?: number | null;
             /**
              * Member Ids
@@ -812,6 +951,11 @@ export interface components {
             /** Random Seed */
             random_seed: number | null;
             /**
+             * Group Access Configured
+             * @default false
+             */
+            group_access_configured: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -836,6 +980,11 @@ export interface components {
              * @default 0
              */
             reviewed_items: number;
+            /**
+             * Authorized Groups
+             * @default []
+             */
+            authorized_groups: components["schemas"]["UserGroupSummaryOut"][];
         };
         /**
          * PackageStatus
@@ -1103,7 +1252,7 @@ export interface components {
          * Role
          * @enum {string}
          */
-        Role: "developer_admin" | "annotation_manager" | "reviewer" | "annotator";
+        Role: "developer_admin" | "annotation_manager" | "outsourcing_manager" | "reviewer" | "annotator";
         /** StatsOut */
         StatsOut: {
             /** Project Id */
@@ -1145,6 +1294,11 @@ export interface components {
              */
             updated_at: string;
         };
+        /** TaskPackageGroupCreate */
+        TaskPackageGroupCreate: {
+            /** Group Id */
+            group_id: string;
+        };
         /** UserCreate */
         UserCreate: {
             /** Username */
@@ -1159,6 +1313,82 @@ export interface components {
              * @default []
              */
             project_ids: string[];
+            /**
+             * Group Ids
+             * @default []
+             */
+            group_ids: string[];
+        };
+        /** UserGroupCreate */
+        UserGroupCreate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Manager Id */
+            manager_id?: string | null;
+        };
+        /** UserGroupMemberCreate */
+        UserGroupMemberCreate: {
+            /** User Id */
+            user_id: string;
+        };
+        /** UserGroupMemberOut */
+        UserGroupMemberOut: {
+            /** Id */
+            id: string;
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** UserGroupOut */
+        UserGroupOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Created By Id */
+            created_by_id: string;
+            /** Manager Id */
+            manager_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Member Count */
+            member_count: number;
+            /** Members */
+            members: components["schemas"]["UserGroupMemberOut"][];
+        };
+        /** UserGroupSummaryOut */
+        UserGroupSummaryOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Member Count */
+            member_count: number;
+        };
+        /** UserGroupUpdate */
+        UserGroupUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Manager Id */
+            manager_id?: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -1910,6 +2140,141 @@ export interface operations {
             };
         };
     };
+    list_package_groups_api_v1_task_packages__package_id__groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupSummaryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_package_group_api_v1_task_packages__package_id__groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskPackageGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_group_options_api_v1_task_packages__package_id__group_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupSummaryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_package_group_api_v1_task_packages__package_id__groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package_id: string;
+                group_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_items_api_v1_task_packages__package_id__items_get: {
         parameters: {
             query?: {
@@ -2107,6 +2472,211 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_groups_api_v1_user_groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_group_api_v1_user_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_group_api_v1_user_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_api_v1_user_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserGroupUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_member_api_v1_user_groups__group_id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserGroupMemberCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_member_api_v1_user_groups__group_id__members__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+                user_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserGroupOut"];
                 };
             };
             /** @description Validation Error */
