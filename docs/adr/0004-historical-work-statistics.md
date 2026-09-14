@@ -32,6 +32,12 @@ The API supports daily, weekly, and monthly personal buckets, date-range
 people summaries, and CSV exports. No schema migration is required because
 the implementation reuses existing immutable history tables.
 
+The UI and CSV exports do not expose annotation average completion duration:
+the elapsed time between claiming and submitting includes inactive periods
+such as breaks and therefore is not a reliable productivity measure. The
+`average_completion_seconds` response field remains temporarily for client
+compatibility and is not used by the frontend.
+
 Task queues reuse `GET /api/v1/my-tasks`. The existing default remains the
 pending work queue when `view` is omitted or set to `pending`; `view=history`
 adds a read-only list of tasks on which the signed-in user has submitted

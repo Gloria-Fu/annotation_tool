@@ -69,7 +69,6 @@ function AnnotationMetricCards({ metric }: { metric: WorkMetric }) {
       <MetricCard label="最终通过" value={metric.final_approved_count} />
       <MetricCard label="一次通过率" value={formatPercent(metric.first_pass_rate)} />
       <MetricCard label="返工率" value={formatPercent(metric.rework_rate)} />
-      <MetricCard label="平均完成时长" value={formatDuration(metric.average_completion_seconds)} />
     </>
   );
 }
@@ -104,11 +103,6 @@ function annotationColumns(): TableColumnsType<WorkMetric> {
       title: "返工率",
       dataIndex: "rework_rate",
       render: (value: number) => formatPercent(value),
-    },
-    {
-      title: "平均完成时长",
-      dataIndex: "average_completion_seconds",
-      render: (value: number | null) => formatDuration(value),
     },
   ];
 }
@@ -175,6 +169,13 @@ function PersonalWorkStatisticsPage() {
     queryKey: queryKeys.personalWork(projectId, query.startDate, query.endDate, granularity),
     queryFn: () => reportsApi.personal(query),
   });
+  const periodsLatestFirst = useMemo(
+    () =>
+      [...(data?.periods ?? [])].sort((left, right) =>
+        right.period_start.localeCompare(left.period_start),
+      ),
+    [data?.periods],
+  );
   const showAnnotation = user.role !== "reviewer";
   const showReview = user.role !== "annotator";
   const columns = useMemo<TableColumnsType<WorkMetric>>(
@@ -253,7 +254,7 @@ function PersonalWorkStatisticsPage() {
             <Table<WorkMetric>
               rowKey={(row) => `${row.user_id}-${row.period_start}`}
               loading={isLoading}
-              dataSource={data.periods}
+              dataSource={periodsLatestFirst}
               columns={columns}
               pagination={false}
               scroll={{ x: "max-content" }}
@@ -344,11 +345,6 @@ function PeopleWorkStatisticsPage() {
       title: "审核退回率",
       dataIndex: "review_return_rate",
       render: (value: number) => formatPercent(value),
-    },
-    {
-      title: "平均完成时长",
-      dataIndex: "average_completion_seconds",
-      render: (value: number | null) => formatDuration(value),
     },
     {
       title: "平均审核时长",
