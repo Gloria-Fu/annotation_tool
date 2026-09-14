@@ -48,6 +48,16 @@ def review_item(
     return service.review_item(item_id, payload, user, db)
 
 
+@router.put("/api/v1/work-items/{item_id}/review-draft", response_model=TaskItemOut)
+def save_review_draft(
+    item_id: str,
+    payload: RevisionInput,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> TaskItem:
+    return service.save_review_draft(item_id, payload, user, db)
+
+
 @router.post("/api/v1/work-items/{item_id}/clear", response_model=TaskItemOut)
 def clear_annotations(
     item_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)

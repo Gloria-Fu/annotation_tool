@@ -20,6 +20,7 @@ from app.features.work_items.service import (
     initial_segments,
     review_item,
     save_draft,
+    save_review_draft,
     submit_annotation,
 )
 from app.models import (
@@ -143,6 +144,32 @@ def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
     assert assigned_review_context.annotator is not None
     assert assigned_review_context.annotator.username == annotator.username
     assert assigned_review_context.reviewer is None
+    item = save_review_draft(
+        item.id,
+        RevisionInput(
+            payload={
+                "segments": [
+                    {
+                        "id": "segment-1",
+                        "start_frame": 0,
+                        "end_frame": 10,
+                        "text": "pick reviewed",
+                    }
+                ]
+            }
+        ),
+        reviewer,
+        db,
+    )
+    assert item.status == ItemStatus.REVIEWING
+    latest_revision = db.scalar(
+        select(AnnotationRevision)
+        .where(AnnotationRevision.task_item_id == item.id)
+        .order_by(AnnotationRevision.version.desc())
+        .limit(1)
+    )
+    assert latest_revision is not None
+    assert latest_revision.stage == "review_draft"
     item = review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
     assert item.status == ItemStatus.COMPLETED
     reviewed_context = context(item.id, reviewer, db)

@@ -417,6 +417,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/work-items/{item_id}/review-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Review Draft */
+        put: operations["save_review_draft_api_v1_work_items__item_id__review_draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/work-items/{item_id}/clear": {
         parameters: {
             query?: never;
@@ -2224,6 +2241,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_review_draft_api_v1_work_items__item_id__review_draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: {
+                annotate_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisionInput"];
             };
         };
         responses: {

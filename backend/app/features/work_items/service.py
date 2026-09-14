@@ -398,6 +398,48 @@ def review_item(item_id: str, payload: ReviewInput, user: User, db: Session) -> 
     return item
 
 
+def save_review_draft(item_id: str, payload: RevisionInput, user: User, db: Session) -> TaskItem:
+    item, _, episode, dataset = item_access(db, item_id, user)
+    if (
+        item.reviewer_id != user.id
+        or item.annotator_id == user.id
+        or item.status not in (ItemStatus.REVIEW_ASSIGNED, ItemStatus.REVIEWING)
+    ):
+        raise HTTPException(status_code=403, detail="不能保存该审核任务")
+    validate_segments(payload, episode.length)
+    previous = latest_revision(db, item.id)
+    if payload.base_revision_id and (not previous or payload.base_revision_id != previous.id):
+        raise HTTPException(status_code=409, detail="标注已被其他操作更新，请重新加载")
+    version = previous.version + 1 if previous else 1
+    try:
+        state_machine.start_review(item, user.id)
+    except InvalidTransition as exc:
+        if item.status != ItemStatus.REVIEWING:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    prepared = annotation_storage.prepare_revision(
+        resolve_dataset_root(dataset.root_path),
+        item.id,
+        version,
+        revision_document(
+            item, episode, float((dataset.info or {}).get("fps", 30)), payload.payload
+        ),
+    )
+    revision = AnnotationRevision(
+        task_item_id=item.id,
+        version=version,
+        schema_version=payload.schema_version,
+        payload=payload.payload,
+        stage="review_draft",
+        created_by_id=user.id,
+        source_revision_id=previous.id if previous else None,
+        file_path=prepared.relative_path,
+        file_hash=prepared.file_hash,
+    )
+    audit(db, user.id, "save_review_draft", "task_item", item.id)
+    commit_prepared_revision(db, annotation_storage, prepared, revision)
+    return item
+
+
 def clear_annotations(item_id: str, user: User, db: Session) -> TaskItem:
     item, _, episode, dataset = item_access(db, item_id, user)
     _ensure_can_edit(item, user, "清空")
