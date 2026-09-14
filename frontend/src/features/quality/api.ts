@@ -7,6 +7,30 @@ import type {
   TaskItem,
 } from "../../shared/api/types";
 
+const CREATE_BATCH_TIMEOUT_MS = 20_000;
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function withTimeout<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  timeoutMessage: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), CREATE_BATCH_TIMEOUT_MS);
+  try {
+    return await request(controller.signal);
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(timeoutMessage, { cause: error });
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export const qualityApi = {
   batches: (projectId: string) =>
     api<QualityBatch[]>(`/quality-batches?project_id=${encodeURIComponent(projectId)}`),
@@ -20,10 +44,15 @@ export const qualityApi = {
     seed: string;
     only_unchecked: boolean;
   }) =>
-    api<QualityBatchDetail>("/quality-batches", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    withTimeout(
+      (signal) =>
+        api<QualityBatchDetail>("/quality-batches?include_samples=false", {
+          method: "POST",
+          body: JSON.stringify(input),
+          signal,
+        }),
+      "生成抽检清单超时，请缩小抽检范围或稍后重试。",
+    ),
   check: (
     batchId: string,
     itemId: string,

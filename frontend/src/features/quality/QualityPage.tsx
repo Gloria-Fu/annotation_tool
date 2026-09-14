@@ -16,7 +16,6 @@ import {
 import { Eye, History, Shuffle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
-import { ApiError } from "../../shared/api/client";
 import type { QualitySample, TaskPackage, User } from "../../shared/api/types";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
@@ -31,6 +30,10 @@ function modeLabel(mode: string): string {
   if (mode === "ratio") return "按比例";
   if (mode === "count") return "按数量";
   return "全部";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "请稍后重试";
 }
 
 export function QualityPage() {
@@ -48,6 +51,7 @@ export function QualityPage() {
   const [pendingReject, setPendingReject] = useState<QualitySample>();
   const [rejectComment, setRejectComment] = useState("");
   const [historyItem, setHistoryItem] = useState<QualitySample>();
+  const [createFailure, setCreateFailure] = useState<string | null>(null);
 
   const { data: packages = [] } = useQuery({
     queryKey: queryKeys.packages(projectId),
@@ -65,7 +69,7 @@ export function QualityPage() {
     queryFn: usersApi.list,
     enabled: canManage,
   });
-  const { data: batch } = useQuery({
+  const { data: batch, isLoading: batchLoading } = useQuery({
     queryKey: selectedBatchId
       ? queryKeys.qualityBatch(selectedBatchId)
       : queryKeys.qualityBatch("empty"),
@@ -80,6 +84,7 @@ export function QualityPage() {
     enabled: !!historyItem,
   });
   const create = useMutation({
+    onMutate: () => setCreateFailure(null),
     mutationFn: () =>
       qualityApi.createBatch({
         package_id: packageId as string,
@@ -95,7 +100,7 @@ export function QualityPage() {
       message.success(`已生成 ${created.total_samples} 条抽检清单`);
       void queryClient.invalidateQueries({ queryKey: queryKeys.qualityBatches(projectId) });
     },
-    onError: (error: ApiError) => message.error(error.message),
+    onError: (error: unknown) => setCreateFailure(errorMessage(error)),
   });
   const check = useMutation({
     mutationFn: ({
@@ -116,12 +121,19 @@ export function QualityPage() {
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.qualityBatches(projectId) });
     },
-    onError: (error: ApiError) => message.error(error.message),
+    onError: (error: unknown) => message.error(errorMessage(error)),
   });
 
   const visibleBatches = packageId
     ? batches.filter((entry) => entry.package_id === packageId)
     : batches;
+  const selectedPackage = packages.find((entry) => entry.id === packageId);
+  const createDisabledReason =
+    !packageId || !canManage
+      ? null
+      : selectedPackage && selectedPackage.reviewed_items <= 0
+        ? "所选任务包暂无已审核完成任务，不能生成抽检清单"
+        : null;
   const selectedSamples = batch?.samples || [];
 
   return (
@@ -133,6 +145,7 @@ export function QualityPage() {
           onChange={(value) => {
             setPackageId(value);
             setSelectedBatchId(undefined);
+            setCreateFailure(null);
           }}
           placeholder="选择任务包"
           style={{ width: 280 }}
@@ -188,7 +201,7 @@ export function QualityPage() {
             style={{ width: 190 }}
             options={users
               .filter((candidate: User) =>
-                ["developer_admin", "annotation_manager", "reviewer"].includes(candidate.role),
+                ["developer_admin", "annotation_manager"].includes(candidate.role),
               )
               .map((candidate: User) => ({
                 value: candidate.id,
@@ -199,12 +212,15 @@ export function QualityPage() {
         <Button
           type="primary"
           icon={<Shuffle size={15} />}
-          disabled={!packageId || !canManage}
+          disabled={!packageId || !canManage || !!createDisabledReason}
           loading={create.isPending}
           onClick={() => create.mutate()}
         >
           生成抽检清单
         </Button>
+        {createDisabledReason && (
+          <Typography.Text type="warning">{createDisabledReason}</Typography.Text>
+        )}
       </div>
 
       <div className="quality-summary" aria-label="抽检概览">
@@ -271,6 +287,7 @@ export function QualityPage() {
         <Table<QualitySample>
           rowKey="id"
           dataSource={selectedSamples}
+          loading={batchLoading}
           locale={{
             emptyText: packageId ? "请生成或选择抽检批次" : "请先选择任务包",
           }}
@@ -360,6 +377,17 @@ export function QualityPage() {
           ]}
         />
       </div>
+
+      <Modal
+        open={!!createFailure}
+        title="生成抽检清单失败"
+        okText="知道了"
+        cancelButtonProps={{ style: { display: "none" } }}
+        onOk={() => setCreateFailure(null)}
+        onCancel={() => setCreateFailure(null)}
+      >
+        <Typography.Paragraph>{createFailure}</Typography.Paragraph>
+      </Modal>
 
       <Modal
         open={!!pendingReject}
