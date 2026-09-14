@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database import Base
@@ -21,6 +31,7 @@ class TaskPackage(Base):
     )
     claim_policy: Mapped[ClaimPolicy] = mapped_column(Enum(ClaimPolicy, native_enum=False))
     random_seed: Mapped[int | None] = mapped_column(Integer)
+    group_access_configured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -34,6 +45,20 @@ class TaskPackageMember(Base):
         ForeignKey("task_packages.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+
+class TaskPackageGroup(Base):
+    __tablename__ = "task_package_groups"
+    __table_args__ = (UniqueConstraint("package_id", "group_id", name="uq_task_package_group"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    package_id: Mapped[str] = mapped_column(
+        ForeignKey("task_packages.id", ondelete="CASCADE"), index=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("user_groups.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class TaskItem(Base):

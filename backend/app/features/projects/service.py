@@ -4,14 +4,48 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.permissions import ensure_project_access
-from app.models import Project, ProjectMember, Role, User, audit
+from app.models import (
+    PackageStatus,
+    Project,
+    ProjectMember,
+    Role,
+    TaskPackage,
+    TaskPackageGroup,
+    User,
+    UserGroup,
+    UserGroupMember,
+    audit,
+)
 from app.schemas import MemberCreate, ProjectCreate
 
 
 def list_projects(user: User, db: Session) -> list[Project]:
     stmt = select(Project).where(Project.is_active.is_(True)).order_by(Project.name)
     if user.role != Role.DEVELOPER_ADMIN:
-        stmt = stmt.join(ProjectMember).where(ProjectMember.user_id == user.id)
+        project_membership = select(ProjectMember.project_id).where(
+            ProjectMember.user_id == user.id
+        )
+        group_package_access = (
+            select(TaskPackage.project_id)
+            .join(TaskPackageGroup, TaskPackageGroup.package_id == TaskPackage.id)
+            .join(UserGroupMember, UserGroupMember.group_id == TaskPackageGroup.group_id)
+            .where(
+                UserGroupMember.user_id == user.id,
+                TaskPackage.group_access_configured.is_(True),
+                TaskPackage.status == PackageStatus.PUBLISHED,
+            )
+        )
+        managed_package_access = (
+            select(TaskPackage.project_id)
+            .join(TaskPackageGroup, TaskPackageGroup.package_id == TaskPackage.id)
+            .join(UserGroup, UserGroup.id == TaskPackageGroup.group_id)
+            .where(UserGroup.manager_id == user.id)
+        )
+        stmt = stmt.where(
+            (Project.id.in_(project_membership))
+            | (Project.id.in_(group_package_access))
+            | (Project.id.in_(managed_package_access))
+        )
     return list(db.scalars(stmt).all())
 
 

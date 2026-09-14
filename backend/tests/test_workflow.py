@@ -2,6 +2,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from app.features.projects.service import list_projects
 from app.features.quality.service import (
     check as quality_check,
 )
@@ -12,8 +13,15 @@ from app.features.quality.service import (
 from app.features.quality.service import (
     history as quality_history,
 )
-from app.features.task_packages.service import claim, create_package, list_items, list_packages
-from app.features.users.service import delete_user
+from app.features.task_packages.service import (
+    add_package_group,
+    claim,
+    create_package,
+    list_items,
+    list_packages,
+    remove_package_group,
+)
+from app.features.users.service import create_user, delete_user, list_users, update_user
 from app.features.work_items.service import (
     clear_annotations,
     context,
@@ -41,8 +49,19 @@ from app.models import (
     TaskPackage,
     TaskPackageMember,
     User,
+    UserGroup,
+    UserGroupMember,
 )
-from app.schemas import PackageCreate, QualityBatchCreate, QualityInput, ReviewInput, RevisionInput
+from app.schemas import (
+    PackageCreate,
+    QualityBatchCreate,
+    QualityInput,
+    ReviewInput,
+    RevisionInput,
+    TaskPackageGroupCreate,
+    UserCreate,
+    UserUpdate,
+)
 from fastapi import HTTPException
 from sqlalchemy import select
 
@@ -343,16 +362,186 @@ def test_project_members_can_access_legacy_restricted_package(db, tmp_path, monk
     assert claim(package.id, reviewer, True, db).id == item.id
 
 
+def test_group_authorized_package_replaces_project_membership_access(db, tmp_path, monkeypatch):
+    admin, _, _, package, item = setup_item(db, tmp_path, monkeypatch)
+    external = make_user(db, "external-annotator", Role.ANNOTATOR)
+    group = UserGroup(name="External team", created_by_id=admin.id)
+    db.add(group)
+    db.flush()
+    db.add(UserGroupMember(group_id=group.id, user_id=external.id))
+    db.commit()
+
+    add_package_group(
+        package.id,
+        TaskPackageGroupCreate(group_id=group.id),
+        admin,
+        db,
+    )
+
+    assert [project.id for project in list_projects(external, db)] == [package.project_id]
+    assert [listed["id"] for listed in list_packages(package.project_id, external, db)] == [
+        package.id
+    ]
+    assert [listed.id for listed in list_items(package.id, None, external, db)] == [item.id]
+    claimed = claim(package.id, external, False, db)
+    assert claimed.id == item.id
+    assert context(item.id, external, db).item.id == item.id
+
+
+def test_outsourcing_manager_is_scoped_to_managed_groups_and_can_view_items(
+    db, tmp_path, monkeypatch
+):
+    admin, _, _, package, item = setup_item(db, tmp_path, monkeypatch)
+    manager = make_user(db, "outsourcing-manager", Role.OUTSOURCING_MANAGER)
+    other_manager = make_user(db, "other-outsourcing-manager", Role.OUTSOURCING_MANAGER)
+    worker = create_user(
+        UserCreate(
+            username="managed-worker",
+            display_name="Managed Worker",
+            password="password-1234",
+            role=Role.ANNOTATOR,
+            group_ids=[],
+        ),
+        admin,
+        db,
+    )
+    own_group = UserGroup(
+        name="Managed team",
+        created_by_id=admin.id,
+        manager_id=manager.id,
+    )
+    other_group = UserGroup(
+        name="Other team",
+        created_by_id=admin.id,
+        manager_id=other_manager.id,
+    )
+    db.add_all([own_group, other_group])
+    db.flush()
+    db.add(UserGroupMember(group_id=own_group.id, user_id=worker.id))
+    other_package = TaskPackage(
+        project_id=package.project_id,
+        dataset_id=package.dataset_id,
+        title="Other package",
+        status=PackageStatus.PUBLISHED,
+        claim_policy=ClaimPolicy.SEQUENTIAL,
+        created_by_id=admin.id,
+    )
+    db.add(other_package)
+    db.flush()
+    db.commit()
+    add_package_group(package.id, TaskPackageGroupCreate(group_id=own_group.id), admin, db)
+    add_package_group(
+        other_package.id,
+        TaskPackageGroupCreate(group_id=other_group.id),
+        admin,
+        db,
+    )
+
+    assert [project.id for project in list_projects(manager, db)] == [package.project_id]
+    assert [row["id"] for row in list_packages(package.project_id, manager, db)] == [package.id]
+    assert [row["id"] for row in list_packages(None, manager, db)] == [package.id]
+    assert [listed.id for listed in list_items(package.id, None, manager, db)] == [item.id]
+    assert context(item.id, manager, db).item.id == item.id
+    with pytest.raises(HTTPException) as hidden:
+        list_items(other_package.id, None, manager, db)
+    assert hidden.value.status_code == 403
+
+    assert [listed.id for listed in list_users(db, manager)] == [worker.id]
+    with pytest.raises(HTTPException, match="只能创建标注员或审核员"):
+        create_user(
+            UserCreate(
+                username="forbidden-manager",
+                display_name="Forbidden Manager",
+                password="password-1234",
+                role=Role.ANNOTATION_MANAGER,
+                group_ids=[own_group.id],
+            ),
+            manager,
+            db,
+        )
+    with pytest.raises(HTTPException, match="只能将账号加入自己负责的群组"):
+        create_user(
+            UserCreate(
+                username="wrong-group-worker",
+                display_name="Wrong Group Worker",
+                password="password-1234",
+                role=Role.ANNOTATOR,
+                group_ids=[other_group.id],
+            ),
+            manager,
+            db,
+        )
+    with pytest.raises(HTTPException, match="群组只能加入标注员或审核员"):
+        create_user(
+            UserCreate(
+                username="manager-in-group",
+                display_name="Manager In Group",
+                password="password-1234",
+                role=Role.OUTSOURCING_MANAGER,
+                group_ids=[own_group.id],
+            ),
+            admin,
+            db,
+        )
+    update_user(worker.id, UserUpdate(display_name="Managed Worker Updated"), manager, db)
+    assert db.get(User, worker.id).display_name == "Managed Worker Updated"
+
+
+def test_unauthorized_user_cannot_list_or_open_group_package(db, tmp_path, monkeypatch):
+    admin, _, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+    external = make_user(db, "outside-annotator", Role.ANNOTATOR)
+    group = UserGroup(name="Authorized team", created_by_id=admin.id)
+    db.add(group)
+    db.flush()
+    db.add(UserGroupMember(group_id=group.id, user_id=external.id))
+    db.commit()
+    add_package_group(package.id, TaskPackageGroupCreate(group_id=group.id), admin, db)
+
+    outsider = make_user(db, "unauthorized-annotator", Role.ANNOTATOR)
+    assert list_packages(package.project_id, outsider, db) == []
+    with pytest.raises(HTTPException) as forbidden:
+        list_items(package.id, None, outsider, db)
+    assert forbidden.value.status_code == 403
+
+
+def test_removing_last_package_group_does_not_restore_project_access(db, tmp_path, monkeypatch):
+    admin, annotator, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+    group = UserGroup(name="Temporary team", created_by_id=admin.id)
+    db.add(group)
+    db.flush()
+    db.commit()
+    add_package_group(package.id, TaskPackageGroupCreate(group_id=group.id), admin, db)
+    remove_package_group(package.id, group.id, admin, db)
+    db.refresh(package)
+
+    assert package.group_access_configured is True
+    assert list_packages(package.project_id, annotator, db) == []
+    with pytest.raises(HTTPException) as forbidden:
+        list_items(package.id, None, annotator, db)
+    assert forbidden.value.status_code == 403
+
+
 def test_deprecated_package_member_ids_do_not_create_package_restrictions(
     db, tmp_path, monkeypatch
 ):
     admin, annotator, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+    db.add(
+        DatasetEpisode(
+            dataset_id=package.dataset_id,
+            episode_index=1,
+            length=10,
+            data_path="data-1.parquet",
+            video_paths={},
+        )
+    )
+    db.commit()
 
     created = create_package(
         PackageCreate(
             project_id=package.project_id,
             dataset_id=package.dataset_id,
             title="New package",
+            item_count=1,
             member_ids=[annotator.id],
         ),
         admin,
@@ -365,6 +554,82 @@ def test_deprecated_package_member_ids_do_not_create_package_restrictions(
         ).all()
         == []
     )
+
+
+def test_create_package_allocates_only_unassigned_episodes(db, tmp_path, monkeypatch):
+    admin, _, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+    db.add_all(
+        [
+            DatasetEpisode(
+                dataset_id=package.dataset_id,
+                episode_index=index,
+                length=10,
+                data_path=f"data-{index}.parquet",
+                video_paths={},
+            )
+            for index in range(1, 7)
+        ]
+    )
+    db.commit()
+
+    first = create_package(
+        PackageCreate(
+            project_id=package.project_id,
+            dataset_id=package.dataset_id,
+            title="Sequential package",
+            item_count=2,
+            claim_policy=ClaimPolicy.SEQUENTIAL,
+        ),
+        admin,
+        db,
+    )
+    first_indices = [
+        episode.episode_index
+        for episode in db.scalars(
+            select(DatasetEpisode)
+            .join(TaskItem, TaskItem.episode_id == DatasetEpisode.id)
+            .where(TaskItem.package_id == first.id)
+            .order_by(TaskItem.claim_order)
+        ).all()
+    ]
+    assert first_indices == [1, 2]
+
+    second = create_package(
+        PackageCreate(
+            project_id=package.project_id,
+            dataset_id=package.dataset_id,
+            title="Random package",
+            item_count=2,
+            claim_policy=ClaimPolicy.RANDOM,
+            random_seed=7,
+        ),
+        admin,
+        db,
+    )
+    second_indices = [
+        episode.episode_index
+        for episode in db.scalars(
+            select(DatasetEpisode)
+            .join(TaskItem, TaskItem.episode_id == DatasetEpisode.id)
+            .where(TaskItem.package_id == second.id)
+            .order_by(TaskItem.claim_order)
+        ).all()
+    ]
+    assert len(second_indices) == 2
+    assert set(second_indices).issubset({3, 4, 5, 6})
+    assert set(first_indices).isdisjoint(second_indices)
+
+    with pytest.raises(HTTPException, match="剩余未分配 episode 只有 2 条"):
+        create_package(
+            PackageCreate(
+                project_id=package.project_id,
+                dataset_id=package.dataset_id,
+                title="Too large",
+                item_count=3,
+            ),
+            admin,
+            db,
+        )
 
 
 def test_quality_rejection_exposes_reason_and_rework_reopens_qa(db, tmp_path, monkeypatch):

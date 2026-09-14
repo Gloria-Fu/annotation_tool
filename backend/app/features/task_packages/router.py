@@ -7,7 +7,15 @@ from app.core.permissions import current_user, require_roles
 from app.database import get_db
 from app.features.task_packages import service
 from app.models import ClaimPolicy, ItemStatus, Role, TaskItem, TaskPackage, User
-from app.schemas import AssignmentRequest, PackageCreate, PackageOut, ReclaimRequest, TaskItemOut
+from app.schemas import (
+    AssignmentRequest,
+    PackageCreate,
+    PackageOut,
+    ReclaimRequest,
+    TaskItemOut,
+    TaskPackageGroupCreate,
+    UserGroupSummaryOut,
+)
 
 router = APIRouter()
 
@@ -37,6 +45,54 @@ def publish_package(
     db: Session = Depends(get_db),
 ) -> TaskPackage:
     return service.publish_package(package_id, actor, db)
+
+
+@router.get(
+    "/api/v1/task-packages/{package_id}/groups",
+    response_model=list[UserGroupSummaryOut],
+)
+def list_package_groups(
+    package_id: str,
+    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    db: Session = Depends(get_db),
+) -> list[UserGroupSummaryOut]:
+    return service.list_package_groups(package_id, actor, db)
+
+
+@router.get(
+    "/api/v1/task-packages/{package_id}/group-options",
+    response_model=list[UserGroupSummaryOut],
+)
+def list_group_options(
+    package_id: str,
+    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    db: Session = Depends(get_db),
+) -> list[UserGroupSummaryOut]:
+    return service.list_group_options(package_id, actor, db)
+
+
+@router.post(
+    "/api/v1/task-packages/{package_id}/groups",
+    response_model=UserGroupSummaryOut,
+    status_code=201,
+)
+def add_package_group(
+    package_id: str,
+    payload: TaskPackageGroupCreate,
+    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    db: Session = Depends(get_db),
+) -> UserGroupSummaryOut:
+    return service.add_package_group(package_id, payload, actor, db)
+
+
+@router.delete("/api/v1/task-packages/{package_id}/groups/{group_id}", status_code=204)
+def remove_package_group(
+    package_id: str,
+    group_id: str,
+    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    db: Session = Depends(get_db),
+) -> None:
+    service.remove_package_group(package_id, group_id, actor, db)
 
 
 @router.get("/api/v1/task-packages/{package_id}/items", response_model=list[TaskItemOut])

@@ -1,10 +1,16 @@
 import random
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.permissions import ensure_project_access
+from app.core.permissions import (
+    ensure_project_access,
+    ensure_task_package_access,
+    task_package_access_condition,
+    task_package_manager_scope_condition,
+)
 from app.features.users.service import manageable_project_ids
 from app.features.work_items import state_machine
 from app.features.work_items.state_machine import InvalidTransition
@@ -21,21 +27,62 @@ from app.models import (
     Role,
     TaskItem,
     TaskPackage,
+    TaskPackageGroup,
     User,
+    UserGroup,
+    UserGroupMember,
     audit,
 )
-from app.schemas import AssignmentRequest, PackageCreate, ReclaimRequest
+from app.schemas import (
+    AssignmentRequest,
+    PackageCreate,
+    ReclaimRequest,
+    TaskPackageGroupCreate,
+    UserGroupSummaryOut,
+)
+
+
+def _package_or_404(package_id: str, db: Session) -> TaskPackage:
+    package = db.get(TaskPackage, package_id)
+    if not package:
+        raise HTTPException(status_code=404, detail="任务包不存在")
+    return package
+
+
+def _group_summaries(db: Session, package_id: str) -> list[UserGroupSummaryOut]:
+    rows = db.execute(
+        select(
+            UserGroup.id,
+            UserGroup.name,
+            func.count(UserGroupMember.id),
+        )
+        .join(TaskPackageGroup, TaskPackageGroup.group_id == UserGroup.id)
+        .outerjoin(UserGroupMember, UserGroupMember.group_id == UserGroup.id)
+        .where(TaskPackageGroup.package_id == package_id)
+        .group_by(UserGroup.id, UserGroup.name)
+        .order_by(UserGroup.name)
+    ).all()
+    return [
+        UserGroupSummaryOut(id=group_id, name=name, member_count=member_count)
+        for group_id, name, member_count in rows
+    ]
 
 
 def list_packages(project_id: str | None, user: User, db: Session) -> list[dict]:
     stmt = select(TaskPackage).order_by(TaskPackage.created_at.desc())
     if project_id:
-        ensure_project_access(db, user, project_id)
+        if user.role in (Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER):
+            ensure_project_access(db, user, project_id)
         stmt = stmt.where(TaskPackage.project_id == project_id)
-    elif user.role != Role.DEVELOPER_ADMIN:
+    elif user.role == Role.ANNOTATION_MANAGER:
         stmt = stmt.where(TaskPackage.project_id.in_(manageable_project_ids(db, user)))
+    if user.role == Role.OUTSOURCING_MANAGER:
+        stmt = stmt.where(task_package_manager_scope_condition(user))
     if user.role in (Role.ANNOTATOR, Role.REVIEWER):
-        stmt = stmt.where(TaskPackage.status == PackageStatus.PUBLISHED)
+        stmt = stmt.where(
+            TaskPackage.status == PackageStatus.PUBLISHED,
+            task_package_access_condition(user),
+        )
     packages = list(db.scalars(stmt).all())
     result = []
     for package in packages:
@@ -59,6 +106,7 @@ def list_packages(project_id: str | None, user: User, db: Session) -> list[dict]
                     for item in items
                 ),
                 "reviewed_items": sum(item.status == ItemStatus.COMPLETED for item in items),
+                "authorized_groups": _group_summaries(db, package.id),
             }
         )
     return result
@@ -78,13 +126,31 @@ def create_package(payload: PackageCreate, actor: User, db: Session) -> TaskPack
         stmt = stmt.where(DatasetEpisode.episode_index >= payload.episode_start)
     if payload.episode_end is not None:
         stmt = stmt.where(DatasetEpisode.episode_index <= payload.episode_end)
-    episodes = list(db.scalars(stmt.order_by(DatasetEpisode.episode_index)).all())
+    assigned_episode_ids = set(
+        db.scalars(
+            select(TaskItem.episode_id)
+            .join(TaskPackage, TaskPackage.id == TaskItem.package_id)
+            .where(TaskPackage.dataset_id == dataset.id)
+        ).all()
+    )
+    episodes = [
+        episode
+        for episode in db.scalars(stmt.order_by(DatasetEpisode.episode_index)).all()
+        if episode.id not in assigned_episode_ids
+    ]
     if not episodes:
-        raise HTTPException(status_code=400, detail="所选范围没有 episode")
+        raise HTTPException(status_code=409, detail="该数据集已没有尚未分配到任务包的 episode")
+    requested_count = payload.item_count if payload.item_count is not None else len(episodes)
+    if requested_count > len(episodes):
+        raise HTTPException(
+            status_code=409,
+            detail=f"剩余未分配 episode 只有 {len(episodes)} 条，无法创建 {requested_count} 条任务",
+        )
     seed = payload.random_seed
     if payload.claim_policy == ClaimPolicy.RANDOM:
         seed = seed if seed is not None else random.SystemRandom().randint(1, 2_147_483_647)
         random.Random(seed).shuffle(episodes)
+    episodes = episodes[:requested_count]
     package = TaskPackage(
         project_id=payload.project_id,
         dataset_id=dataset.id,
@@ -110,9 +176,7 @@ def create_package(payload: PackageCreate, actor: User, db: Session) -> TaskPack
 
 
 def publish_package(package_id: str, actor: User, db: Session) -> TaskPackage:
-    package = db.get(TaskPackage, package_id)
-    if not package:
-        raise HTTPException(status_code=404, detail="任务包不存在")
+    package = _package_or_404(package_id, db)
     ensure_project_access(db, actor, package.project_id, manager=actor.role != Role.DEVELOPER_ADMIN)
     if package.status != PackageStatus.DRAFT:
         raise HTTPException(status_code=409, detail="只有草稿任务包可以发布")
@@ -125,10 +189,8 @@ def publish_package(package_id: str, actor: User, db: Session) -> TaskPackage:
 def list_items(
     package_id: str, status: ItemStatus | None, user: User, db: Session
 ) -> list[TaskItem]:
-    package = db.get(TaskPackage, package_id)
-    if not package:
-        raise HTTPException(status_code=404, detail="任务包不存在")
-    ensure_project_access(db, user, package.project_id)
+    package = _package_or_404(package_id, db)
+    ensure_task_package_access(db, user, package)
     stmt = select(TaskItem).where(TaskItem.package_id == package_id)
     if status:
         stmt = stmt.where(TaskItem.status == status)
@@ -151,7 +213,7 @@ def claim(
             status_code=409,
             detail=f"领取{stage_label}失败：任务包尚未发布，暂不可领取。",
         )
-    ensure_project_access(db, user, package.project_id)
+    ensure_task_package_access(db, user, package)
     allowed = (
         (Role.REVIEWER, Role.ANNOTATION_MANAGER)
         if review
@@ -252,6 +314,8 @@ def my_tasks(stage: str, view: str, user: User, db: Session) -> list[TaskItem]:
                     )
                 )
             )
+    if user.role not in (Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER):
+        stmt = stmt.join(TaskPackage).where(task_package_access_condition(user))
     return list(db.scalars(stmt.order_by(TaskItem.updated_at.desc())).all())
 
 
@@ -265,8 +329,8 @@ def assign_items(
     assignee = db.get(User, payload.assignee_id)
     if not package or not assignee:
         raise HTTPException(status_code=404, detail="任务包或账号不存在")
-    ensure_project_access(db, actor, package.project_id, manager=actor.role != Role.DEVELOPER_ADMIN)
-    ensure_project_access(db, assignee, package.project_id)
+    ensure_task_package_access(db, actor, package, manager=True)
+    ensure_task_package_access(db, assignee, package)
     expected_role = (
         (Role.REVIEWER, Role.ANNOTATION_MANAGER)
         if payload.stage == "review"
@@ -326,7 +390,7 @@ def reclaim_item(item_id: str, payload: ReclaimRequest, actor: User, db: Session
     package = db.get(TaskPackage, item.package_id) if item else None
     if not item or not package:
         raise HTTPException(status_code=404, detail="任务不存在")
-    ensure_project_access(db, actor, package.project_id, manager=actor.role != Role.DEVELOPER_ADMIN)
+    ensure_task_package_access(db, actor, package, manager=True)
     try:
         if item.status in (
             ItemStatus.ANNOTATION_ASSIGNED,
@@ -353,3 +417,98 @@ def reclaim_item(item_id: str, payload: ReclaimRequest, actor: User, db: Session
     audit(db, actor.id, "reclaim_task", "task_item", item.id, reason=payload.reason)
     db.commit()
     return item
+
+
+def list_package_groups(package_id: str, actor: User, db: Session) -> list[UserGroupSummaryOut]:
+    package = _package_or_404(package_id, db)
+    ensure_task_package_access(db, actor, package, manager=True)
+    return _group_summaries(db, package.id)
+
+
+def list_group_options(package_id: str, actor: User, db: Session) -> list[UserGroupSummaryOut]:
+    package = _package_or_404(package_id, db)
+    ensure_task_package_access(db, actor, package, manager=True)
+    groups = db.scalars(select(UserGroup).order_by(UserGroup.name)).all()
+    member_count_rows = db.execute(
+        select(UserGroupMember.group_id, func.count(UserGroupMember.id)).group_by(
+            UserGroupMember.group_id
+        )
+    ).all()
+    member_counts: dict[str, int] = {
+        group_id: int(member_count) for group_id, member_count in member_count_rows
+    }
+    assigned_ids = {
+        group_id
+        for (group_id,) in db.execute(
+            select(TaskPackageGroup.group_id).where(TaskPackageGroup.package_id == package.id)
+        ).all()
+    }
+    return [
+        UserGroupSummaryOut(
+            id=group.id,
+            name=group.name,
+            member_count=member_counts.get(group.id, 0),
+        )
+        for group in groups
+        if group.id not in assigned_ids
+    ]
+
+
+def add_package_group(
+    package_id: str,
+    payload: TaskPackageGroupCreate,
+    actor: User,
+    db: Session,
+) -> UserGroupSummaryOut:
+    package = _package_or_404(package_id, db)
+    ensure_task_package_access(db, actor, package, manager=True)
+    group = db.get(UserGroup, payload.group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="群组不存在")
+    relation = TaskPackageGroup(package_id=package.id, group_id=group.id)
+    db.add(relation)
+    package.group_access_configured = True
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="该群组已授权给任务包") from exc
+    audit(
+        db,
+        actor.id,
+        "add_task_package_group",
+        "task_package",
+        package.id,
+        group_id=group.id,
+    )
+    db.commit()
+    member_count = (
+        db.scalar(
+            select(func.count(UserGroupMember.id)).where(UserGroupMember.group_id == group.id)
+        )
+        or 0
+    )
+    return UserGroupSummaryOut(id=group.id, name=group.name, member_count=member_count)
+
+
+def remove_package_group(package_id: str, group_id: str, actor: User, db: Session) -> None:
+    package = _package_or_404(package_id, db)
+    ensure_task_package_access(db, actor, package, manager=True)
+    relation = db.scalar(
+        select(TaskPackageGroup).where(
+            TaskPackageGroup.package_id == package.id,
+            TaskPackageGroup.group_id == group_id,
+        )
+    )
+    if not relation:
+        raise HTTPException(status_code=404, detail="该群组尚未授权给任务包")
+    db.delete(relation)
+    audit(
+        db,
+        actor.id,
+        "remove_task_package_group",
+        "task_package",
+        package.id,
+        group_id=group_id,
+    )
+    db.commit()

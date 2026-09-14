@@ -1,4 +1,4 @@
-from app.models.accounts import ProjectMember, User
+from app.models.accounts import ProjectMember, User, UserGroup, UserGroupMember
 from app.models.annotations import (
     AnnotationRevision,
     AssignmentHistory,
@@ -20,7 +20,7 @@ from app.models.common import (
 )
 from app.models.datasets import Dataset, DatasetEpisode, ImportJob
 from app.models.projects import Project
-from app.models.tasks import TaskItem, TaskPackage, TaskPackageMember
+from app.models.tasks import TaskItem, TaskPackage, TaskPackageGroup, TaskPackageMember
 
 __all__ = [
     "AnnotationRevision",
@@ -42,8 +42,11 @@ __all__ = [
     "Role",
     "TaskItem",
     "TaskPackage",
+    "TaskPackageGroup",
     "TaskPackageMember",
     "User",
+    "UserGroup",
+    "UserGroupMember",
     "audit",
     "new_id",
     "utcnow",

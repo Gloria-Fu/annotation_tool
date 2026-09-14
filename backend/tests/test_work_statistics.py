@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.features.reports.service import people_work_statistics, personal_work_statistics, stats
+from app.features.task_packages.service import add_package_group
 from app.models import (
     AnnotationRevision,
     AssignmentHistory,
@@ -14,7 +15,10 @@ from app.models import (
     Role,
     TaskItem,
     TaskPackage,
+    UserGroup,
+    UserGroupMember,
 )
+from app.schemas import TaskPackageGroupCreate
 from fastapi import HTTPException
 
 from test_workflow import make_user, setup_item
@@ -204,3 +208,31 @@ def test_people_statistics_are_project_scoped_and_manager_protected(db, tmp_path
             None,
         )
     assert error.value.status_code == 403
+
+
+def test_outsourcing_manager_people_statistics_are_group_scoped(db, tmp_path, monkeypatch):
+    admin, annotator, reviewer, package, item = setup_item(db, tmp_path, monkeypatch)
+    manager = make_user(db, "outsourcing-stats-manager", Role.OUTSOURCING_MANAGER)
+    group = UserGroup(
+        name="Stats team",
+        created_by_id=admin.id,
+        manager_id=manager.id,
+    )
+    db.add(group)
+    db.flush()
+    db.add(UserGroupMember(group_id=group.id, user_id=annotator.id))
+    db.commit()
+    add_package_group(package.id, TaskPackageGroupCreate(group_id=group.id), admin, db)
+    add_event_data(db, item, annotator, reviewer, datetime(2026, 9, 10, tzinfo=UTC))
+
+    result = people_work_statistics(
+        manager,
+        db,
+        package.project_id,
+        datetime(2026, 9, 10, tzinfo=UTC).date(),
+        datetime(2026, 9, 10, tzinfo=UTC).date(),
+        None,
+    )
+
+    assert [person.user_id for person in result.people] == [annotator.id]
+    assert result.people[0].first_submissions == 1

@@ -14,6 +14,7 @@ def new_id() -> str:
 class Role(str, enum.Enum):
     DEVELOPER_ADMIN = "developer_admin"
     ANNOTATION_MANAGER = "annotation_manager"
+    OUTSOURCING_MANAGER = "outsourcing_manager"
     REVIEWER = "reviewer"
     ANNOTATOR = "annotator"
 

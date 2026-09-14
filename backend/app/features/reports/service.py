@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import false, func, select
 from sqlalchemy.orm import Session
 
-from app.core.permissions import ensure_project_access
+from app.core.permissions import ensure_project_access, managed_group_ids, managed_user_ids
 from app.features.users.service import manageable_project_ids
 from app.models import (
     AnnotationRevision,
@@ -25,6 +25,7 @@ from app.models import (
     Role,
     TaskItem,
     TaskPackage,
+    TaskPackageGroup,
     User,
 )
 from app.schemas import (
@@ -201,6 +202,19 @@ def _video_duration_seconds(length: int, dataset_info: object) -> float:
 
 
 def _scope_project_ids(db: Session, user: User, project_id: str | None) -> set[str] | None:
+    if user.role == Role.OUTSOURCING_MANAGER:
+        managed_projects = set(
+            db.scalars(
+                select(TaskPackage.project_id)
+                .join(TaskPackageGroup, TaskPackageGroup.package_id == TaskPackage.id)
+                .where(TaskPackageGroup.group_id.in_(managed_group_ids(db, user)))
+            ).all()
+        )
+        if project_id:
+            if project_id not in managed_projects:
+                raise HTTPException(status_code=403, detail="无权查看该项目统计")
+            return {project_id}
+        return managed_projects
     if project_id:
         ensure_project_access(db, user, project_id)
         return {project_id}
@@ -635,13 +649,18 @@ def _visible_people(
     db: Session,
     project_ids: set[str] | None,
     role: Role | None,
+    user_ids: set[str] | None = None,
 ) -> list[User]:
     statement = select(User).order_by(User.display_name, User.username)
-    if project_ids is not None:
+    if project_ids is not None and user_ids is None:
         if not project_ids:
             return []
         member_ids = select(ProjectMember.user_id).where(ProjectMember.project_id.in_(project_ids))
         statement = statement.where(User.id.in_(member_ids))
+    if user_ids is not None:
+        if not user_ids:
+            return []
+        statement = statement.where(User.id.in_(user_ids))
     if role:
         statement = statement.where(User.role == role)
     return list(db.scalars(statement).all())
@@ -655,12 +674,21 @@ def people_work_statistics(
     end_date: date | None,
     role: Role | None,
 ) -> PeopleWorkStatisticsOut:
-    if user.role not in (Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER):
+    if user.role not in (
+        Role.DEVELOPER_ADMIN,
+        Role.ANNOTATION_MANAGER,
+        Role.OUTSOURCING_MANAGER,
+    ):
         raise HTTPException(status_code=403, detail="无权查看人员工作量统计")
     start, end = _date_range(start_date, end_date)
     project_ids = _scope_project_ids(db, user, project_id)
     events = _load_work_events(db, project_ids)
-    people = _visible_people(db, project_ids, role)
+    people = _visible_people(
+        db,
+        project_ids,
+        role,
+        managed_user_ids(db, user) if user.role == Role.OUTSOURCING_MANAGER else None,
+    )
     return PeopleWorkStatisticsOut(
         start_date=start,
         end_date=end,

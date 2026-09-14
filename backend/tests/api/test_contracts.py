@@ -20,6 +20,12 @@ EXPECTED_OPERATIONS = {
     ("POST", "/api/v1/users"),
     ("PATCH", "/api/v1/users/{user_id}"),
     ("DELETE", "/api/v1/users/{user_id}"),
+    ("GET", "/api/v1/user-groups"),
+    ("POST", "/api/v1/user-groups"),
+    ("PATCH", "/api/v1/user-groups/{group_id}"),
+    ("DELETE", "/api/v1/user-groups/{group_id}"),
+    ("POST", "/api/v1/user-groups/{group_id}/members"),
+    ("DELETE", "/api/v1/user-groups/{group_id}/members/{user_id}"),
     ("GET", "/api/v1/projects"),
     ("POST", "/api/v1/projects"),
     ("POST", "/api/v1/projects/{project_id}/members"),
@@ -30,6 +36,10 @@ EXPECTED_OPERATIONS = {
     ("GET", "/api/v1/task-packages"),
     ("POST", "/api/v1/task-packages"),
     ("POST", "/api/v1/task-packages/{package_id}/publish"),
+    ("GET", "/api/v1/task-packages/{package_id}/groups"),
+    ("GET", "/api/v1/task-packages/{package_id}/group-options"),
+    ("POST", "/api/v1/task-packages/{package_id}/groups"),
+    ("DELETE", "/api/v1/task-packages/{package_id}/groups/{group_id}"),
     ("GET", "/api/v1/task-packages/{package_id}/items"),
     ("POST", "/api/v1/annotation-tasks/claim"),
     ("POST", "/api/v1/review-tasks/claim"),
@@ -80,6 +90,12 @@ PROTECTED_REQUESTS = [
     ),
     ("PATCH", "/api/v1/users/user-id", {}),
     ("DELETE", "/api/v1/users/user-id", None),
+    ("GET", "/api/v1/user-groups", None),
+    ("POST", "/api/v1/user-groups", {"name": "Group"}),
+    ("PATCH", "/api/v1/user-groups/group-id", {"name": "Renamed"}),
+    ("DELETE", "/api/v1/user-groups/group-id", None),
+    ("POST", "/api/v1/user-groups/group-id/members", {"user_id": "user-id"}),
+    ("DELETE", "/api/v1/user-groups/group-id/members/user-id", None),
     ("GET", "/api/v1/projects", None),
     ("POST", "/api/v1/projects", {"name": "New Project"}),
     ("POST", "/api/v1/projects/project-id/members", {"user_id": "user-id"}),
@@ -98,6 +114,10 @@ PROTECTED_REQUESTS = [
         {"project_id": "project-id", "dataset_id": "dataset-id", "title": "Package"},
     ),
     ("POST", "/api/v1/task-packages/package-id/publish", None),
+    ("GET", "/api/v1/task-packages/package-id/groups", None),
+    ("GET", "/api/v1/task-packages/package-id/group-options", None),
+    ("POST", "/api/v1/task-packages/package-id/groups", {"group_id": "group-id"}),
+    ("DELETE", "/api/v1/task-packages/package-id/groups/group-id", None),
     ("GET", "/api/v1/task-packages/package-id/items", None),
     ("POST", "/api/v1/annotation-tasks/claim", None),
     ("POST", "/api/v1/review-tasks/claim", None),
@@ -180,6 +200,17 @@ def test_package_member_ids_is_deprecated_for_compatibility():
 
     assert member_ids["deprecated"] is True
     assert "项目成员关系决定" in member_ids["description"]
+
+
+def test_package_create_exposes_item_count_and_deprecates_episode_ranges():
+    properties = app.openapi()["components"]["schemas"]["PackageCreate"]["properties"]
+    item_count = properties["item_count"]["anyOf"][0]
+
+    assert item_count["minimum"] == 1.0
+    assert item_count["maximum"] == 100000.0
+    assert properties["episode_indices"]["deprecated"] is True
+    assert properties["episode_start"]["deprecated"] is True
+    assert properties["episode_end"]["deprecated"] is True
 
 
 def test_media_contract_exposes_range_and_cache_variants():

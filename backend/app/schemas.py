@@ -26,6 +26,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=10)
     role: Role
     project_ids: list[str] = []
+    group_ids: list[str] = []
 
 
 class UserUpdate(BaseModel):
@@ -41,6 +42,52 @@ class UserOut(ORMModel):
     role: Role
     is_active: bool
     must_change_password: bool
+
+
+class UserGroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=500)
+    manager_id: str | None = None
+
+
+class UserGroupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=500)
+    manager_id: str | None = None
+
+
+class UserGroupMemberCreate(BaseModel):
+    user_id: str
+
+
+class UserGroupMemberOut(ORMModel):
+    id: str
+    username: str
+    display_name: str
+    role: Role
+    is_active: bool
+
+
+class UserGroupOut(ORMModel):
+    id: str
+    name: str
+    description: str | None
+    created_by_id: str
+    manager_id: str | None
+    created_at: datetime
+    updated_at: datetime
+    member_count: int
+    members: list[UserGroupMemberOut]
+
+
+class UserGroupSummaryOut(BaseModel):
+    id: str
+    name: str
+    member_count: int
+
+
+class TaskPackageGroupCreate(BaseModel):
+    group_id: str
 
 
 class ProjectCreate(BaseModel):
@@ -93,10 +140,28 @@ class PackageCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     claim_policy: ClaimPolicy = ClaimPolicy.SEQUENTIAL
+    item_count: int | None = Field(
+        default=None,
+        ge=1,
+        le=100000,
+        description="本次任务包创建的条目数量；新客户端应始终传入。",
+    )
     random_seed: int | None = None
-    episode_indices: list[int] | None = None
-    episode_start: int | None = None
-    episode_end: int | None = None
+    episode_indices: list[int] | None = Field(
+        default=None,
+        json_schema_extra={"deprecated": True},
+        description="已废弃。旧客户端可继续使用，服务端会从其中排除已分配 episode。",
+    )
+    episode_start: int | None = Field(
+        default=None,
+        json_schema_extra={"deprecated": True},
+        description="已废弃。新客户端请改用 item_count。",
+    )
+    episode_end: int | None = Field(
+        default=None,
+        json_schema_extra={"deprecated": True},
+        description="已废弃。新客户端请改用 item_count。",
+    )
     member_ids: list[str] | None = Field(
         default=None,
         deprecated=True,
@@ -113,11 +178,13 @@ class PackageOut(ORMModel):
     status: PackageStatus
     claim_policy: ClaimPolicy
     random_seed: int | None
+    group_access_configured: bool = False
     created_at: datetime
     total_items: int = 0
     claimed_items: int = 0
     annotated_items: int = 0
     reviewed_items: int = 0
+    authorized_groups: list[UserGroupSummaryOut] = []
 
 
 class AssignmentRequest(BaseModel):

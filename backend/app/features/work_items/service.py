@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.permissions import ensure_project_access
+from app.core.permissions import ensure_task_package_access
 from app.features.work_items import state_machine
 from app.features.work_items.state_machine import InvalidTransition
 from app.infrastructure.annotation_storage import AnnotationStorage, PreparedRevision
@@ -58,7 +58,7 @@ def item_access(
     package = db.get(TaskPackage, item.package_id) if item else None
     if not item or not package:
         raise HTTPException(status_code=404, detail="任务不存在")
-    ensure_project_access(db, user, package.project_id)
+    ensure_task_package_access(db, user, package)
     episode = db.get(DatasetEpisode, item.episode_id)
     dataset = db.get(Dataset, package.dataset_id)
     if not episode or not dataset:
@@ -166,6 +166,7 @@ def context(item_id: str, user: User, db: Session) -> WorkContext:
         user.role != Role.DEVELOPER_ADMIN
         and user.id not in (item.annotator_id, item.reviewer_id)
         and user.role != Role.ANNOTATION_MANAGER
+        and user.role != Role.OUTSOURCING_MANAGER
     ):
         raise HTTPException(status_code=403, detail="该任务未分配给你")
     revision = latest_revision(db, item.id)
@@ -471,7 +472,11 @@ def clear_annotations(item_id: str, user: User, db: Session) -> TaskItem:
 
 def authorized_file(item_id: str, user: User, db: Session, media_key: str | None = None) -> Path:
     item, _, episode, dataset = item_access(db, item_id, user)
-    if user.role not in (Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER) and user.id not in (
+    if user.role not in (
+        Role.DEVELOPER_ADMIN,
+        Role.ANNOTATION_MANAGER,
+        Role.OUTSOURCING_MANAGER,
+    ) and user.id not in (
         item.annotator_id,
         item.reviewer_id,
     ):

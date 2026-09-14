@@ -12,7 +12,9 @@ router = APIRouter()
 
 @router.get("/api/v1/users", response_model=list[UserOut])
 def list_users(
-    user: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    user: User = Depends(
+        require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER, Role.OUTSOURCING_MANAGER)
+    ),
     db: Session = Depends(get_db),
 ) -> list[User]:
     return service.list_users(db, user)
@@ -21,7 +23,9 @@ def list_users(
 @router.post("/api/v1/users", response_model=UserOut, status_code=201)
 def create_user(
     payload: UserCreate,
-    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    actor: User = Depends(
+        require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER, Role.OUTSOURCING_MANAGER)
+    ),
     db: Session = Depends(get_db),
 ) -> User:
     return service.create_user(payload, actor, db)
@@ -31,7 +35,9 @@ def create_user(
 def update_user(
     user_id: str,
     payload: UserUpdate,
-    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    actor: User = Depends(
+        require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER, Role.OUTSOURCING_MANAGER)
+    ),
     db: Session = Depends(get_db),
 ) -> User:
     return service.update_user(user_id, payload, actor, db)
@@ -40,7 +46,9 @@ def update_user(
 @router.delete("/api/v1/users/{user_id}", status_code=204)
 def delete_user(
     user_id: str,
-    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    actor: User = Depends(
+        require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER, Role.OUTSOURCING_MANAGER)
+    ),
     db: Session = Depends(get_db),
 ) -> None:
     service.delete_user(user_id, actor, db)
