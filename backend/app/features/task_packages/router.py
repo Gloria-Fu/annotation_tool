@@ -71,10 +71,11 @@ def claim_review(
 @router.get("/api/v1/my-tasks", response_model=list[TaskItemOut])
 def my_tasks(
     stage: str = Query(default="annotation", pattern="^(annotation|review)$"),
+    view: str = Query(default="pending", pattern="^(pending|history)$"),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[TaskItem]:
-    return service.my_tasks(stage, user, db)
+    return service.my_tasks(stage, view, user, db)
 
 
 @router.post("/api/v1/task-packages/{package_id}/assign", response_model=list[TaskItemOut])

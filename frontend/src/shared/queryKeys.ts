@@ -6,7 +6,9 @@ export const queryKeys = {
   datasets: (projectId?: string) => ["datasets", projectId] as const,
   packages: (projectId?: string) => ["packages", projectId] as const,
   packageItems: (packageId: string) => ["package-items", packageId] as const,
-  myTasks: (review: boolean) => ["my-tasks", review] as const,
+  myTasksRoot: (review: boolean) => ["my-tasks", review] as const,
+  myTasks: (review: boolean, view: "pending" | "history" = "pending") =>
+    ["my-tasks", review, view] as const,
   statsEmpty: ["stats", "empty"] as const,
   stats: (projectId: string) => ["stats", projectId] as const,
   personalWork: (

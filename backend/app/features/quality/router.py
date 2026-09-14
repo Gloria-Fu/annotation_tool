@@ -24,10 +24,11 @@ router = APIRouter()
 )
 def create_quality_batch(
     payload: QualityBatchCreate,
+    include_samples: bool = Query(default=True),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> QualityBatchDetailOut:
-    return service.create_batch(payload, user, db)
+    return service.create_batch(payload, user, db, include_samples=include_samples)
 
 
 @router.get("/api/v1/quality-batches", response_model=list[QualityBatchOut])

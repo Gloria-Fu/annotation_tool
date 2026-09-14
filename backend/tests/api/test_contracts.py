@@ -151,6 +151,57 @@ def test_api_contract_contains_all_legacy_operations():
     assert operations == EXPECTED_OPERATIONS
 
 
+def test_my_tasks_contract_exposes_pending_and_history_views():
+    parameters = app.openapi()["paths"]["/api/v1/my-tasks"]["get"]["parameters"]
+    query_parameters = {
+        parameter["name"]: parameter for parameter in parameters if parameter["in"] == "query"
+    }
+
+    assert query_parameters["stage"]["schema"]["default"] == "annotation"
+    assert query_parameters["stage"]["schema"]["pattern"] == "^(annotation|review)$"
+    assert query_parameters["view"]["schema"]["default"] == "pending"
+    assert query_parameters["view"]["schema"]["pattern"] == "^(pending|history)$"
+
+
+def test_quality_batch_contract_can_omit_samples_from_create_response():
+    parameters = app.openapi()["paths"]["/api/v1/quality-batches"]["post"]["parameters"]
+    query_parameters = {
+        parameter["name"]: parameter for parameter in parameters if parameter["in"] == "query"
+    }
+
+    assert query_parameters["include_samples"]["schema"]["default"] is True
+    assert query_parameters["include_samples"]["schema"]["type"] == "boolean"
+
+
+def test_package_member_ids_is_deprecated_for_compatibility():
+    member_ids = app.openapi()["components"]["schemas"]["PackageCreate"]["properties"]["member_ids"]
+
+    assert member_ids["deprecated"] is True
+    assert "项目成员关系决定" in member_ids["description"]
+
+
+def test_media_contract_exposes_range_and_cache_variants():
+    operation = app.openapi()["paths"]["/api/v1/work-items/{item_id}/media/{media_key}"]["get"]
+    parameters = {
+        parameter["name"]: parameter
+        for parameter in operation["parameters"]
+        if parameter["in"] == "header"
+    }
+
+    assert set(parameters) == {"Range", "If-None-Match", "If-Modified-Since"}
+    assert set(operation["responses"]) == {"200", "206", "304", "416", "422"}
+
+
+def test_work_context_contract_exposes_assignee_identities():
+    schemas = app.openapi()["components"]["schemas"]
+    work_context = schemas["WorkContext"]["properties"]
+    user_schema = schemas["WorkContextUser"]
+
+    assert set(user_schema["required"]) == {"id", "username", "display_name"}
+    assert work_context["annotator"]["anyOf"][0]["$ref"] == "#/components/schemas/WorkContextUser"
+    assert work_context["reviewer"]["anyOf"][0]["$ref"] == "#/components/schemas/WorkContextUser"
+
+
 def test_health_endpoint_returns_success(client):
     response = client.get("/health")
     assert response.status_code == 200

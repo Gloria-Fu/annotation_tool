@@ -12,7 +12,7 @@ from app.features.quality.service import (
 from app.features.quality.service import (
     history as quality_history,
 )
-from app.features.task_packages.service import claim
+from app.features.task_packages.service import claim, create_package, list_items, list_packages
 from app.features.users.service import delete_user
 from app.features.work_items.service import (
     clear_annotations,
@@ -38,9 +38,10 @@ from app.models import (
     Role,
     TaskItem,
     TaskPackage,
+    TaskPackageMember,
     User,
 )
-from app.schemas import QualityBatchCreate, QualityInput, ReviewInput, RevisionInput
+from app.schemas import PackageCreate, QualityBatchCreate, QualityInput, ReviewInput, RevisionInput
 from fastapi import HTTPException
 from sqlalchemy import select
 
@@ -114,6 +115,9 @@ def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
 
     item = claim(package.id, annotator, False, db)
     assert item.id == original.id and item.status == ItemStatus.ANNOTATION_ASSIGNED
+    claimed_context = context(item.id, annotator, db)
+    assert claimed_context.annotator is None
+    assert claimed_context.reviewer is None
     with pytest.raises(HTTPException) as conflict:
         claim(package.id, annotator, False, db)
     assert conflict.value.status_code == 409
@@ -129,16 +133,32 @@ def test_full_workflow_and_quality_rejection(db, tmp_path, monkeypatch):
         db,
     )
     assert item.status == ItemStatus.REVIEW_PENDING
+    submitted_context = context(item.id, annotator, db)
+    assert submitted_context.annotator is not None
+    assert submitted_context.annotator.username == annotator.username
+    assert submitted_context.reviewer is None
     item = claim(package.id, reviewer, True, db)
     assert item.status == ItemStatus.REVIEW_ASSIGNED
+    assigned_review_context = context(item.id, reviewer, db)
+    assert assigned_review_context.annotator is not None
+    assert assigned_review_context.annotator.username == annotator.username
+    assert assigned_review_context.reviewer is None
     item = review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
     assert item.status == ItemStatus.COMPLETED
+    reviewed_context = context(item.id, reviewer, db)
+    assert reviewed_context.annotator is not None
+    assert reviewed_context.annotator.username == annotator.username
+    assert reviewed_context.reviewer is not None
+    assert reviewed_context.reviewer.username == reviewer.username
     item = quality_check(
         item.id, QualityInput(result=QaStatus.REJECTED, comment="抽检不通过"), admin, db
     )
     assert item.status == ItemStatus.CHANGES_REQUESTED
     assert item.annotator_id == annotator.id
     assert item.reviewer_id is None
+    rework_context = context(item.id, annotator, db)
+    assert rework_context.reviewer is not None
+    assert rework_context.reviewer.username == reviewer.username
     assert sha256(source_path.read_bytes()).hexdigest() == source_hash
 
 
@@ -158,11 +178,16 @@ def test_quality_batch_persists_sample_and_checked_revision(db, tmp_path, monkey
     claim(package.id, reviewer, True, db)
     review_item(item.id, ReviewInput(decision="approve"), reviewer, db)
 
-    batch = create_batch(
+    created = create_batch(
         QualityBatchCreate(package_id=package.id, mode="all", seed="traceable"),
         admin,
         db,
+        include_samples=False,
     )
+    assert created.total_samples == 1
+    assert created.samples == []
+
+    batch = get_batch(created.id, admin, db)
     assert batch.total_samples == 1
     assert batch.samples[0].task_item_id == original.id
     assert db.scalar(select(QualitySample).where(QualitySample.batch_id == batch.id))
@@ -276,6 +301,43 @@ def test_reviewer_can_choose_sequential_or_random_claim_order(db, tmp_path, monk
     )
     random_item = claim(package.id, reviewer, True, db, ClaimPolicy.RANDOM)
     assert random_item.claim_order == 2
+
+
+def test_project_members_can_access_legacy_restricted_package(db, tmp_path, monkeypatch):
+    _, annotator, reviewer, package, item = setup_item(db, tmp_path, monkeypatch)
+    db.add(TaskPackageMember(package_id=package.id, user_id=annotator.id))
+    item.annotator_id = annotator.id
+    item.status = ItemStatus.REVIEW_PENDING
+    db.commit()
+
+    packages = list_packages(package.project_id, reviewer, db)
+    assert [listed["id"] for listed in packages] == [package.id]
+    assert [listed.id for listed in list_items(package.id, None, reviewer, db)] == [item.id]
+    assert claim(package.id, reviewer, True, db).id == item.id
+
+
+def test_deprecated_package_member_ids_do_not_create_package_restrictions(
+    db, tmp_path, monkeypatch
+):
+    admin, annotator, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+
+    created = create_package(
+        PackageCreate(
+            project_id=package.project_id,
+            dataset_id=package.dataset_id,
+            title="New package",
+            member_ids=[annotator.id],
+        ),
+        admin,
+        db,
+    )
+
+    assert (
+        db.scalars(
+            select(TaskPackageMember).where(TaskPackageMember.package_id == created.id)
+        ).all()
+        == []
+    )
 
 
 def test_quality_rejection_exposes_reason_and_rework_reopens_qa(db, tmp_path, monkeypatch):

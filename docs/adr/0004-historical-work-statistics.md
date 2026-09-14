@@ -32,6 +32,12 @@ The API supports daily, weekly, and monthly personal buckets, date-range
 people summaries, and CSV exports. No schema migration is required because
 the implementation reuses existing immutable history tables.
 
+Task queues reuse `GET /api/v1/my-tasks`. The existing default remains the
+pending work queue when `view` is omitted or set to `pending`; `view=history`
+adds a read-only list of tasks on which the signed-in user has submitted
+annotation or completed a review. The response shape and route remain
+unchanged, so existing clients continue to receive the pending queue.
+
 ## Consequences
 
 Historical results remain available after a task is reassigned or completed,

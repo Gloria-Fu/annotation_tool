@@ -1211,6 +1211,17 @@
             }
           },
           {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(pending|history)$",
+              "default": "pending",
+              "title": "View"
+            }
+          },
+          {
             "name": "annotate_session",
             "in": "cookie",
             "required": false,
@@ -1771,6 +1782,54 @@
             }
           },
           {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Range"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          },
+          {
+            "name": "If-Modified-Since",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Modified-Since"
+            }
+          },
+          {
             "name": "annotate_session",
             "in": "cookie",
             "required": false,
@@ -1796,6 +1855,15 @@
               }
             }
           },
+          "206": {
+            "description": "Partial video content"
+          },
+          "304": {
+            "description": "Video has not changed"
+          },
+          "416": {
+            "description": "Requested byte range cannot be satisfied"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1814,6 +1882,16 @@
         "summary": "Create Quality Batch",
         "operationId": "create_quality_batch_api_v1_quality_batches_post",
         "parameters": [
+          {
+            "name": "include_samples",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Samples"
+            }
+          },
           {
             "name": "annotate_session",
             "in": "cookie",
@@ -3075,7 +3153,9 @@
                 "type": "null"
               }
             ],
-            "title": "Member Ids"
+            "title": "Member Ids",
+            "description": "已废弃。任务包权限由项目成员关系决定，此字段仅为兼容旧客户端保留。",
+            "deprecated": true
           }
         },
         "type": "object",
@@ -4180,6 +4260,26 @@
           "item": {
             "$ref": "#/components/schemas/TaskItemOut"
           },
+          "annotator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkContextUser"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkContextUser"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "episode_index": {
             "type": "integer",
             "title": "Episode Index"
@@ -4257,6 +4357,29 @@
           "latest_revision"
         ],
         "title": "WorkContext"
+      },
+      "WorkContextUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "display_name"
+        ],
+        "title": "WorkContextUser"
       },
       "WorkMetricOut": {
         "properties": {

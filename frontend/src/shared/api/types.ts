@@ -100,8 +100,14 @@ export type RevisionSnapshot = {
   file_path?: string | null;
   file_hash?: string | null;
 };
-export type WorkContext = Omit<components["schemas"]["WorkContext"], "latest_revision"> & {
+export type WorkContextUser = Pick<User, "id" | "username" | "display_name">;
+export type WorkContext = Omit<
+  components["schemas"]["WorkContext"],
+  "latest_revision" | "annotator" | "reviewer"
+> & {
   latest_revision: RevisionSnapshot | null;
+  annotator?: WorkContextUser | null;
+  reviewer?: WorkContextUser | null;
   review_comment?: string | null;
   quality_comment?: string | null;
 };

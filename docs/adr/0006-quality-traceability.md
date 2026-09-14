@@ -21,6 +21,10 @@ to `unchecked` when its corrected annotation is submitted for review.
   managers; reviewers only use the review task flow.
 - Existing quality-check calls remain compatible; calls without a batch are
   retained as legacy checks but are not included in a persisted batch.
+- Creating a quality batch keeps full sample details by default for API
+  compatibility. Clients may pass `include_samples=false` to return only the
+  batch summary immediately and fetch sample details through the batch detail
+  endpoint.
 
 ## Rollback Notes
 

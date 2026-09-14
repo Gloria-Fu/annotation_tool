@@ -1,7 +1,7 @@
 import random
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.permissions import ensure_project_access
@@ -9,18 +9,18 @@ from app.features.users.service import manageable_project_ids
 from app.features.work_items import state_machine
 from app.features.work_items.state_machine import InvalidTransition
 from app.models import (
+    AnnotationRevision,
     AssignmentHistory,
+    AuditLog,
     ClaimPolicy,
     Dataset,
     DatasetEpisode,
     DatasetStatus,
     ItemStatus,
     PackageStatus,
-    ProjectMember,
     Role,
     TaskItem,
     TaskPackage,
-    TaskPackageMember,
     User,
     audit,
 )
@@ -35,19 +35,7 @@ def list_packages(project_id: str | None, user: User, db: Session) -> list[dict]
     elif user.role != Role.DEVELOPER_ADMIN:
         stmt = stmt.where(TaskPackage.project_id.in_(manageable_project_ids(db, user)))
     if user.role in (Role.ANNOTATOR, Role.REVIEWER):
-        any_restriction = exists(
-            select(TaskPackageMember.id).where(TaskPackageMember.package_id == TaskPackage.id)
-        )
-        is_allowed = exists(
-            select(TaskPackageMember.id).where(
-                TaskPackageMember.package_id == TaskPackage.id,
-                TaskPackageMember.user_id == user.id,
-            )
-        )
-        stmt = stmt.where(
-            TaskPackage.status == PackageStatus.PUBLISHED,
-            or_(~any_restriction, is_allowed),
-        )
+        stmt = stmt.where(TaskPackage.status == PackageStatus.PUBLISHED)
     packages = list(db.scalars(stmt).all())
     result = []
     for package in packages:
@@ -108,20 +96,8 @@ def create_package(payload: PackageCreate, actor: User, db: Session) -> TaskPack
     )
     db.add(package)
     db.flush()
-    if payload.member_ids:
-        valid_members = set(
-            db.scalars(
-                select(ProjectMember.user_id).where(
-                    ProjectMember.project_id == payload.project_id,
-                    ProjectMember.user_id.in_(set(payload.member_ids)),
-                )
-            ).all()
-        )
-        if valid_members != set(payload.member_ids):
-            raise HTTPException(status_code=400, detail="成员范围包含非项目成员")
-        db.add_all(
-            [TaskPackageMember(package_id=package.id, user_id=user_id) for user_id in valid_members]
-        )
+    # PackageCreate.member_ids is retained for older clients but no longer
+    # affects authorization; project membership is the single access source.
     db.add_all(
         [
             TaskItem(package_id=package.id, episode_id=episode.id, claim_order=index)
@@ -153,19 +129,6 @@ def list_items(
     if not package:
         raise HTTPException(status_code=404, detail="任务包不存在")
     ensure_project_access(db, user, package.project_id)
-    if user.role in (Role.ANNOTATOR, Role.REVIEWER):
-        has_restriction = db.scalar(
-            select(func.count(TaskPackageMember.id)).where(
-                TaskPackageMember.package_id == package.id
-            )
-        )
-        if has_restriction and not db.scalar(
-            select(TaskPackageMember).where(
-                TaskPackageMember.package_id == package.id,
-                TaskPackageMember.user_id == user.id,
-            )
-        ):
-            raise HTTPException(status_code=403, detail="你不在该任务包的成员范围内")
     stmt = select(TaskItem).where(TaskItem.package_id == package_id)
     if status:
         stmt = stmt.where(TaskItem.status == status)
@@ -199,22 +162,6 @@ def claim(
             status_code=403,
             detail=f"领取{stage_label}失败：当前账号角色不能领取{stage_label}任务。",
         )
-    if user.role in (Role.ANNOTATOR, Role.REVIEWER):
-        has_restriction = db.scalar(
-            select(func.count(TaskPackageMember.id)).where(
-                TaskPackageMember.package_id == package.id
-            )
-        )
-        if has_restriction and not db.scalar(
-            select(TaskPackageMember).where(
-                TaskPackageMember.package_id == package.id,
-                TaskPackageMember.user_id == user.id,
-            )
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail=f"领取{stage_label}失败：当前账号不在该任务包的成员范围内。",
-            )
     effective_policy = claim_policy or package.claim_policy
     stmt = select(TaskItem).where(TaskItem.package_id == package_id)
     if review:
@@ -274,21 +221,37 @@ def claim(
     return item
 
 
-def my_tasks(stage: str, user: User, db: Session) -> list[TaskItem]:
-    assignee_column = TaskItem.reviewer_id if stage == "review" else TaskItem.annotator_id
-    stmt = select(TaskItem).where(assignee_column == user.id)
-    if stage == "review":
-        stmt = stmt.where(TaskItem.status.in_((ItemStatus.REVIEW_ASSIGNED, ItemStatus.REVIEWING)))
+def my_tasks(stage: str, view: str, user: User, db: Session) -> list[TaskItem]:
+    if view == "history":
+        if stage == "review":
+            history_item_ids = select(AuditLog.entity_id).where(
+                AuditLog.actor_id == user.id,
+                AuditLog.entity_type == "task_item",
+                AuditLog.action.in_(("review_approve", "review_request_changes")),
+            )
+        else:
+            history_item_ids = select(AnnotationRevision.task_item_id).where(
+                AnnotationRevision.created_by_id == user.id,
+                AnnotationRevision.stage == "submitted",
+            )
+        stmt = select(TaskItem).where(TaskItem.id.in_(history_item_ids))
     else:
-        stmt = stmt.where(
-            TaskItem.status.in_(
-                (
-                    ItemStatus.ANNOTATION_ASSIGNED,
-                    ItemStatus.ANNOTATING,
-                    ItemStatus.CHANGES_REQUESTED,
+        assignee_column = TaskItem.reviewer_id if stage == "review" else TaskItem.annotator_id
+        stmt = select(TaskItem).where(assignee_column == user.id)
+        if stage == "review":
+            stmt = stmt.where(
+                TaskItem.status.in_((ItemStatus.REVIEW_ASSIGNED, ItemStatus.REVIEWING))
+            )
+        else:
+            stmt = stmt.where(
+                TaskItem.status.in_(
+                    (
+                        ItemStatus.ANNOTATION_ASSIGNED,
+                        ItemStatus.ANNOTATING,
+                        ItemStatus.CHANGES_REQUESTED,
+                    )
                 )
             )
-        )
     return list(db.scalars(stmt.order_by(TaskItem.updated_at.desc())).all())
 
 

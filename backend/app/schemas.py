@@ -97,7 +97,11 @@ class PackageCreate(BaseModel):
     episode_indices: list[int] | None = None
     episode_start: int | None = None
     episode_end: int | None = None
-    member_ids: list[str] | None = None
+    member_ids: list[str] | None = Field(
+        default=None,
+        deprecated=True,
+        description="已废弃。任务包权限由项目成员关系决定，此字段仅为兼容旧客户端保留。",
+    )
 
 
 class PackageOut(ORMModel):
@@ -168,8 +172,16 @@ class TaskItemOut(ORMModel):
     updated_at: datetime
 
 
+class WorkContextUser(ORMModel):
+    id: str
+    username: str
+    display_name: str
+
+
 class WorkContext(BaseModel):
     item: TaskItemOut
+    annotator: WorkContextUser | None = None
+    reviewer: WorkContextUser | None = None
     episode_index: int
     length: int
     fps: float

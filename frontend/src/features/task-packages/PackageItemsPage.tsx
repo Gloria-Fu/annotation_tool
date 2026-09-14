@@ -5,12 +5,33 @@ import { Button, Select, Table, Tag, message } from "antd";
 import { useParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
-import type { TaskItem } from "../../shared/api/types";
+import type { TaskItem, User } from "../../shared/api/types";
 import { statusLabels } from "../../shared/constants/labels";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { taskPackagesApi } from "./api";
 import { usersApi } from "../users/api";
+
+function renderAssignee(userId: string | null, users: User[]) {
+  if (!userId) return "-";
+  const assignee = users.find((user) => user.id === userId);
+  if (!assignee) {
+    return (
+      <span title={`用户 ID：${userId}`} className="assignee-unknown">
+        未找到人员
+      </span>
+    );
+  }
+  return (
+    <span
+      className="assignee-cell"
+      title={`姓名：${assignee.display_name} · 用户名：${assignee.username}`}
+    >
+      <strong>{assignee.display_name}</strong>
+      <span className="assignee-username">@{assignee.username}</span>
+    </span>
+  );
+}
 
 export function PackageItemsPage() {
   const { packageId = "" } = useParams();
@@ -84,7 +105,7 @@ export function PackageItemsPage() {
           style={{ width: 220 }}
           options={assignableUsers.map((candidate) => ({
             value: candidate.id,
-            label: candidate.display_name,
+            label: `${candidate.display_name}（${candidate.username}）`,
           }))}
         />
         <Button
@@ -125,12 +146,12 @@ export function PackageItemsPage() {
             {
               title: "标注员",
               dataIndex: "annotator_id",
-              render: (value: string | null) => value?.slice(0, 8) || "-",
+              render: (value: string | null) => renderAssignee(value, users),
             },
             {
               title: "审核员",
               dataIndex: "reviewer_id",
-              render: (value: string | null) => value?.slice(0, 8) || "-",
+              render: (value: string | null) => renderAssignee(value, users),
             },
             {
               title: "操作",

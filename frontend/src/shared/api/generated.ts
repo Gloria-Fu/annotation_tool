@@ -771,7 +771,11 @@ export interface components {
             episode_start?: number | null;
             /** Episode End */
             episode_end?: number | null;
-            /** Member Ids */
+            /**
+             * Member Ids
+             * @deprecated
+             * @description 已废弃。任务包权限由项目成员关系决定，此字段仅为兼容旧客户端保留。
+             */
             member_ids?: string[] | null;
         };
         /** PackageOut */
@@ -1174,6 +1178,8 @@ export interface components {
         /** WorkContext */
         WorkContext: {
             item: components["schemas"]["TaskItemOut"];
+            annotator?: components["schemas"]["WorkContextUser"] | null;
+            reviewer?: components["schemas"]["WorkContextUser"] | null;
             /** Episode Index */
             episode_index: number;
             /** Length */
@@ -1196,6 +1202,15 @@ export interface components {
             review_comment?: string | null;
             /** Quality Comment */
             quality_comment?: string | null;
+        };
+        /** WorkContextUser */
+        WorkContextUser: {
+            /** Id */
+            id: string;
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
         };
         /** WorkMetricOut */
         WorkMetricOut: {
@@ -1984,6 +1999,7 @@ export interface operations {
         parameters: {
             query?: {
                 stage?: string;
+                view?: string;
             };
             header?: never;
             path?: never;
@@ -2300,7 +2316,11 @@ export interface operations {
     item_media_api_v1_work_items__item_id__media__media_key__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                Range?: string | null;
+                "If-None-Match"?: string | null;
+                "If-Modified-Since"?: string | null;
+            };
             path: {
                 item_id: string;
                 media_key: string;
@@ -2319,6 +2339,27 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Partial video content */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Video has not changed */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requested byte range cannot be satisfied */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2367,7 +2408,9 @@ export interface operations {
     };
     create_quality_batch_api_v1_quality_batches_post: {
         parameters: {
-            query?: never;
+            query?: {
+                include_samples?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: {

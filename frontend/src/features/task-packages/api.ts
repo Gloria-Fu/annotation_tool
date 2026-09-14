@@ -6,10 +6,11 @@ export type PackageInput = {
   dataset_id: string;
   title: string;
   claim_policy: "sequential" | "random";
-  member_ids?: string[];
   episode_start?: number;
   episode_end?: number;
 };
+
+export type MyTaskView = "pending" | "history";
 
 export const taskPackagesApi = {
   list: (projectId: string) => api<TaskPackage[]>(`/task-packages?project_id=${projectId}`),
@@ -40,8 +41,8 @@ export const taskPackagesApi = {
       method: "POST",
       body: JSON.stringify({ reason: "管理员手动回收" }),
     }),
-  myTasks: (review: boolean) =>
-    api<TaskItem[]>(`/my-tasks?stage=${review ? "review" : "annotation"}`),
+  myTasks: (review: boolean, view: MyTaskView = "pending") =>
+    api<TaskItem[]>(`/my-tasks?stage=${review ? "review" : "annotation"}&view=${view}`),
   usersForStage: (users: User[], stage: "annotation" | "review") => {
     const roles: Role[] =
       stage === "annotation"

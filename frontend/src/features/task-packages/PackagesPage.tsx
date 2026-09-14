@@ -17,12 +17,11 @@ import { Boxes, Play, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
-import type { Dataset, TaskPackage, User } from "../../shared/api/types";
-import { roleLabels, statusLabels } from "../../shared/constants/labels";
+import type { Dataset, TaskPackage } from "../../shared/api/types";
+import { statusLabels } from "../../shared/constants/labels";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { datasetsApi } from "../datasets/api";
-import { usersApi } from "../users/api";
 import { taskPackagesApi, type PackageInput } from "./api";
 import { claimFailureMessage, claimFailureTitle } from "./claimFailure";
 
@@ -49,11 +48,6 @@ export function PackagesPage() {
     queryKey: queryKeys.datasets(projectId),
     queryFn: () => datasetsApi.list(projectId as string),
     enabled: !!projectId && isManager,
-  });
-  const { data: users = [] } = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: usersApi.list,
-    enabled: isManager,
   });
   const create = useMutation({
     mutationFn: (values: PackageFormValues) =>
@@ -99,7 +93,7 @@ export function PackagesPage() {
     <>
       <PageHeading
         title="任务包"
-        subtitle="每个任务条目对应一个 LeRobot episode"
+        subtitle="每个任务条目对应一个 LeRobot episode，任务包权限由项目成员关系决定"
         action={
           isManager ? (
             <Button type="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>
@@ -200,18 +194,6 @@ export function PackagesPage() {
                 { value: "sequential", label: "按 episode 顺序" },
                 { value: "random", label: "固定随机顺序" },
               ]}
-            />
-          </Form.Item>
-          <Form.Item name="member_ids" label="成员范围">
-            <Select
-              mode="multiple"
-              placeholder="留空表示项目内所有成员"
-              options={users
-                .filter((candidate: User) => ["annotator", "reviewer"].includes(candidate.role))
-                .map((candidate: User) => ({
-                  value: candidate.id,
-                  label: `${candidate.display_name} · ${roleLabels[candidate.role]}`,
-                }))}
             />
           </Form.Item>
           <Space>

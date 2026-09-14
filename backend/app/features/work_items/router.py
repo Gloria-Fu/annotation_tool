@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Header
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.permissions import current_user
@@ -62,11 +62,29 @@ def item_data(
     return service.item_data(item_id, user, db)
 
 
-@router.get("/api/v1/work-items/{item_id}/media/{media_key:path}")
+@router.get(
+    "/api/v1/work-items/{item_id}/media/{media_key:path}",
+    responses={
+        206: {"description": "Partial video content"},
+        304: {"description": "Video has not changed"},
+        416: {"description": "Requested byte range cannot be satisfied"},
+    },
+)
 def item_media(
     item_id: str,
     media_key: str,
+    range_header: str | None = Header(default=None, alias="Range"),
+    if_none_match: str | None = Header(default=None, alias="If-None-Match"),
+    if_modified_since: str | None = Header(default=None, alias="If-Modified-Since"),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> FileResponse:
-    return service.item_media(item_id, media_key, user, db)
+) -> Response:
+    return service.item_media(
+        item_id,
+        media_key,
+        user,
+        db,
+        range_header=range_header,
+        if_none_match=if_none_match,
+        if_modified_since=if_modified_since,
+    )

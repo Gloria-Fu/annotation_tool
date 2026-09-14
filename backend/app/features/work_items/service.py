@@ -1,8 +1,11 @@
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,7 +27,7 @@ from app.models import (
     User,
     audit,
 )
-from app.schemas import ReviewInput, RevisionInput, TaskItemOut, WorkContext
+from app.schemas import ReviewInput, RevisionInput, TaskItemOut, WorkContext, WorkContextUser
 from app.services.importer import resolve_dataset_root
 
 annotation_storage = AnnotationStorage()
@@ -196,8 +199,40 @@ def context(item_id: str, user: User, db: Session) -> WorkContext:
         quality_comment_query = quality_comment_query.where(
             QualityCheck.created_at > revision.created_at
         )
+    submitted_annotator_id = db.scalar(
+        select(AnnotationRevision.created_by_id)
+        .where(
+            AnnotationRevision.task_item_id == item.id,
+            AnnotationRevision.stage == "submitted",
+        )
+        .order_by(AnnotationRevision.created_at.desc())
+        .limit(1)
+    )
+    reviewed_reviewer_id = db.scalar(
+        select(AnnotationRevision.created_by_id)
+        .where(AnnotationRevision.task_item_id == item.id, AnnotationRevision.stage == "reviewed")
+        .order_by(AnnotationRevision.created_at.desc())
+        .limit(1)
+    )
+    legacy_annotated_statuses = {
+        ItemStatus.REVIEW_PENDING,
+        ItemStatus.REVIEW_ASSIGNED,
+        ItemStatus.REVIEWING,
+        ItemStatus.COMPLETED,
+        ItemStatus.CHANGES_REQUESTED,
+    }
+    annotator_id = submitted_annotator_id or (
+        item.annotator_id if item.status in legacy_annotated_statuses else None
+    )
+    reviewer_id = reviewed_reviewer_id or (
+        item.reviewer_id if item.status == ItemStatus.COMPLETED else None
+    )
+    annotator = db.get(User, annotator_id) if annotator_id else None
+    reviewer = db.get(User, reviewer_id) if reviewer_id else None
     return WorkContext(
         item=TaskItemOut.model_validate(item),
+        annotator=WorkContextUser.model_validate(annotator) if annotator else None,
+        reviewer=WorkContextUser.model_validate(reviewer) if reviewer else None,
         episode_index=episode.episode_index,
         length=episode.length,
         fps=fps,
@@ -409,6 +444,113 @@ def authorized_file(item_id: str, user: User, db: Session, media_key: str | None
     return path
 
 
+def _cache_headers(path: Path) -> dict[str, str]:
+    stat = path.stat()
+    modified = datetime.fromtimestamp(stat.st_mtime, UTC)
+    return {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=3600",
+        "ETag": f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"',
+        "Last-Modified": format_datetime(modified, usegmt=True),
+        "Vary": "Cookie",
+    }
+
+
+def _parse_range(range_header: str, size: int) -> tuple[int, int]:
+    if not range_header.startswith("bytes=") or "," in range_header:
+        raise HTTPException(status_code=416, detail="仅支持单个 bytes 范围")
+    value = range_header[6:].strip()
+    if "-" not in value:
+        raise HTTPException(status_code=416, detail="Range 请求格式无效")
+    start_text, end_text = value.split("-", 1)
+    try:
+        if not start_text:
+            suffix_length = int(end_text)
+            if suffix_length <= 0:
+                raise ValueError
+            start = max(0, size - suffix_length)
+            end = size - 1
+        else:
+            start = int(start_text)
+            end = int(end_text) if end_text else size - 1
+            if start < 0 or end < start:
+                raise ValueError
+            end = min(end, size - 1)
+    except ValueError as exc:
+        raise HTTPException(status_code=416, detail="Range 请求格式无效") from exc
+    if start >= size or end < 0:
+        raise HTTPException(status_code=416, detail="请求范围超出文件大小")
+    return start, end
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    return any(
+        candidate.strip() == "*"
+        or candidate.strip() == etag
+        or candidate.strip().removeprefix("W/") == etag
+        for candidate in if_none_match.split(",")
+    )
+
+
+def _modified_since_matches(if_modified_since: str, path: Path) -> bool:
+    try:
+        requested = parsedate_to_datetime(if_modified_since)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if requested is None:
+        return False
+    if requested.tzinfo is None:
+        return False
+    modified = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+    return modified.replace(microsecond=0) <= requested.astimezone(UTC)
+
+
+def _iter_file(path: Path, start: int, end: int, chunk_size: int = 1024 * 1024) -> Iterator[bytes]:
+    with path.open("rb") as handle:
+        handle.seek(start)
+        remaining = end - start + 1
+        while remaining:
+            chunk = handle.read(min(chunk_size, remaining))
+            if not chunk:
+                return
+            remaining -= len(chunk)
+            yield chunk
+
+
+def _media_response(
+    path: Path,
+    media_type: str,
+    range_header: str | None,
+    if_none_match: str | None,
+    if_modified_since: str | None,
+) -> Response:
+    size = path.stat().st_size
+    headers = _cache_headers(path)
+    if if_none_match and _etag_matches(if_none_match, headers["ETag"]):
+        return Response(status_code=304, headers=headers)
+    if not if_none_match and if_modified_since and _modified_since_matches(if_modified_since, path):
+        return Response(status_code=304, headers=headers)
+    if not range_header:
+        return FileResponse(path, media_type=media_type, headers=headers)
+    try:
+        start, end = _parse_range(range_header, size)
+    except HTTPException as exc:
+        exc.headers = {**headers, "Content-Range": f"bytes */{size}"}
+        raise
+    headers.update(
+        {
+            "Content-Length": str(end - start + 1),
+            "Content-Range": f"bytes {start}-{end}/{size}",
+        }
+    )
+    return StreamingResponse(
+        _iter_file(path, start, end),
+        status_code=206,
+        media_type=media_type,
+        headers=headers,
+    )
+
+
 def item_data(item_id: str, user: User, db: Session) -> FileResponse:
     return FileResponse(
         authorized_file(item_id, user, db),
@@ -416,8 +558,19 @@ def item_data(item_id: str, user: User, db: Session) -> FileResponse:
     )
 
 
-def item_media(item_id: str, media_key: str, user: User, db: Session) -> FileResponse:
-    return FileResponse(
+def item_media(
+    item_id: str,
+    media_key: str,
+    user: User,
+    db: Session,
+    range_header: str | None = None,
+    if_none_match: str | None = None,
+    if_modified_since: str | None = None,
+) -> Response:
+    return _media_response(
         authorized_file(item_id, user, db, media_key),
         media_type="video/mp4",
+        range_header=range_header,
+        if_none_match=if_none_match,
+        if_modified_since=if_modified_since,
     )

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
 
@@ -33,17 +34,30 @@ from app.schemas import (
 )
 
 
-def _eligible_items(db: Session, package_id: str, only_unchecked: bool) -> list[TaskItem]:
+@dataclass(frozen=True)
+class SamplingCandidate:
+    id: str
+    claim_order: int
+
+
+def _eligible_items(db: Session, package_id: str, only_unchecked: bool) -> list[SamplingCandidate]:
     statement = select(TaskItem).where(
         TaskItem.package_id == package_id,
         TaskItem.status == ItemStatus.COMPLETED,
     )
     if only_unchecked:
         statement = statement.where(TaskItem.qa_status == QaStatus.UNCHECKED)
-    return list(db.scalars(statement.order_by(TaskItem.claim_order, TaskItem.id)).all())
+    rows = db.execute(
+        statement.with_only_columns(TaskItem.id, TaskItem.claim_order).order_by(
+            TaskItem.claim_order, TaskItem.id
+        )
+    ).all()
+    return [SamplingCandidate(id=item_id, claim_order=claim_order) for item_id, claim_order in rows]
 
 
-def _sample_items(items: list[TaskItem], payload: QualityBatchCreate) -> list[TaskItem]:
+def _sample_items(
+    items: list[SamplingCandidate], payload: QualityBatchCreate
+) -> list[SamplingCandidate]:
     if payload.mode == "all":
         return items
     if not items:
@@ -77,15 +91,11 @@ def _latest_checks_by_item(db: Session, batch_id: str) -> dict[str, QualityCheck
 
 
 def _batch_summary(db: Session, batch: QualityBatch) -> dict[str, Any]:
-    samples = list(
-        db.scalars(
-            select(QualitySample)
-            .where(QualitySample.batch_id == batch.id)
-            .order_by(QualitySample.sample_order)
-        ).all()
+    sample_count = (
+        db.scalar(select(func.count(QualitySample.id)).where(QualitySample.batch_id == batch.id))
+        or 0
     )
-    checks = _latest_checks_by_item(db, batch.id)
-    checked = [check for sample in samples if (check := checks.get(sample.task_item_id))]
+    checked = list(_latest_checks_by_item(db, batch.id).values())
     return {
         "id": batch.id,
         "project_id": batch.project_id,
@@ -100,14 +110,21 @@ def _batch_summary(db: Session, batch: QualityBatch) -> dict[str, Any]:
         "status": batch.status,
         "created_at": batch.created_at,
         "completed_at": batch.completed_at,
-        "total_samples": len(samples),
+        "total_samples": sample_count,
         "checked_samples": len(checked),
         "passed_samples": sum(check.result == QaStatus.PASSED for check in checked),
         "rejected_samples": sum(check.result == QaStatus.REJECTED for check in checked),
     }
 
 
-def _batch_detail(db: Session, batch: QualityBatch) -> QualityBatchDetailOut:
+def _batch_detail(
+    db: Session, batch: QualityBatch, *, include_samples: bool = True
+) -> QualityBatchDetailOut:
+    if not include_samples:
+        return QualityBatchDetailOut(
+            **_batch_summary(db, batch),
+            samples=[],
+        )
     samples = list(
         db.scalars(
             select(QualitySample)
@@ -144,7 +161,13 @@ def _ensure_batch_access(batch: QualityBatch, user: User, db: Session) -> None:
     ensure_project_access(db, user, batch.project_id, manager=True)
 
 
-def create_batch(payload: QualityBatchCreate, actor: User, db: Session) -> QualityBatchDetailOut:
+def create_batch(
+    payload: QualityBatchCreate,
+    actor: User,
+    db: Session,
+    *,
+    include_samples: bool = True,
+) -> QualityBatchDetailOut:
     if actor.role not in (Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER):
         raise HTTPException(status_code=403, detail="只有管理员可以创建抽检批次")
     package = db.get(TaskPackage, payload.package_id)
@@ -198,7 +221,7 @@ def create_batch(payload: QualityBatchCreate, actor: User, db: Session) -> Quali
         assignee_id=assignee.id,
     )
     db.commit()
-    return _batch_detail(db, batch)
+    return _batch_detail(db, batch, include_samples=include_samples)
 
 
 def list_batches(
