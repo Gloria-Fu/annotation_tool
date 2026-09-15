@@ -81,20 +81,34 @@ export function PackageItemsPage() {
     "review_assigned",
     "reviewing",
   ];
-  const canManage = user.role === "developer_admin" || user.role === "annotation_manager";
+  const annotationReclaimable = ["annotation_assigned", "annotating", "changes_requested"];
+  const canAssign = user.role === "developer_admin" || user.role === "annotation_manager";
+  const canReclaimScoped = user.role === "outsourcing_manager";
   const canViewDetails = user.role === "outsourcing_manager";
+  const visibleUserIds = new Set(users.map((candidate) => candidate.id));
+  const canReclaimItem = (row: TaskItem) => {
+    if (!reclaimable.includes(row.status)) return false;
+    if (canAssign) return true;
+    if (!canReclaimScoped) return false;
+    const assigneeId = annotationReclaimable.includes(row.status)
+      ? row.annotator_id
+      : row.reviewer_id;
+    return !!assigneeId && visibleUserIds.has(assigneeId);
+  };
 
   return (
     <>
       <PageHeading
         title="任务条目"
         subtitle={
-          canManage
+          canAssign
             ? "选择待处理条目后可批量指派，已领取条目可手动回收"
-            : "查看任务包内每个 episode 的标注进度和处理结果"
+            : canReclaimScoped
+              ? "查看任务包内每个 episode 的标注进度，可回收本组成员领取的任务"
+              : "查看任务包内每个 episode 的标注进度和处理结果"
         }
       />
-      {canManage && (
+      {canAssign && (
         <div className="toolbar">
           <Select
             value={stage}
@@ -133,7 +147,7 @@ export function PackageItemsPage() {
         <Table<TaskItem>
           rowKey="id"
           rowSelection={
-            canManage
+            canAssign
               ? {
                   selectedRowKeys: selected,
                   onChange: setSelected,
@@ -178,7 +192,7 @@ export function PackageItemsPage() {
                       查看详情
                     </Button>
                   )}
-                  {canManage && reclaimable.includes(row.status) ? (
+                  {canReclaimItem(row) ? (
                     <Button size="small" danger onClick={() => reclaim.mutate(row.id)}>
                       回收
                     </Button>

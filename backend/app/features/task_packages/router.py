@@ -148,7 +148,9 @@ def assign_items(
 def reclaim_item(
     item_id: str,
     payload: ReclaimRequest,
-    actor: User = Depends(require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER)),
+    actor: User = Depends(
+        require_roles(Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER, Role.OUTSOURCING_MANAGER)
+    ),
     db: Session = Depends(get_db),
 ) -> TaskItem:
     return service.reclaim_item(item_id, payload, actor, db)

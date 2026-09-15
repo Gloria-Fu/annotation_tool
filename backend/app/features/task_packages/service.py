@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.permissions import (
     ensure_project_access,
     ensure_task_package_access,
+    managed_user_ids,
     task_package_access_condition,
     task_package_manager_scope_condition,
 )
@@ -385,23 +386,44 @@ def assign_items(
     return items
 
 
+def _reclaim_stage_and_assignee(item: TaskItem) -> tuple[str, str | None]:
+    if item.status in (
+        ItemStatus.ANNOTATION_ASSIGNED,
+        ItemStatus.ANNOTATING,
+        ItemStatus.CHANGES_REQUESTED,
+    ):
+        return "annotation", item.annotator_id
+    if item.status in (ItemStatus.REVIEW_ASSIGNED, ItemStatus.REVIEWING):
+        return "review", item.reviewer_id
+    raise HTTPException(status_code=409, detail="当前状态不可回收")
+
+
+def _ensure_reclaim_access(
+    db: Session, actor: User, package: TaskPackage, assignee_id: str | None
+) -> None:
+    if actor.role in (Role.DEVELOPER_ADMIN, Role.ANNOTATION_MANAGER):
+        ensure_task_package_access(db, actor, package, manager=True)
+        return
+    if actor.role == Role.OUTSOURCING_MANAGER:
+        ensure_task_package_access(db, actor, package)
+        if assignee_id and assignee_id in managed_user_ids(db, actor):
+            return
+        raise HTTPException(status_code=403, detail="只能回收自己负责群组成员领取的任务")
+    raise HTTPException(status_code=403, detail="权限不足")
+
+
 def reclaim_item(item_id: str, payload: ReclaimRequest, actor: User, db: Session) -> TaskItem:
     item = db.get(TaskItem, item_id)
     package = db.get(TaskPackage, item.package_id) if item else None
     if not item or not package:
         raise HTTPException(status_code=404, detail="任务不存在")
-    ensure_task_package_access(db, actor, package, manager=True)
+    stage, assignee_id = _reclaim_stage_and_assignee(item)
+    _ensure_reclaim_access(db, actor, package, assignee_id)
     try:
-        if item.status in (
-            ItemStatus.ANNOTATION_ASSIGNED,
-            ItemStatus.ANNOTATING,
-            ItemStatus.CHANGES_REQUESTED,
-        ):
-            old_assignee, stage = state_machine.reclaim_annotation(item), "annotation"
-        elif item.status in (ItemStatus.REVIEW_ASSIGNED, ItemStatus.REVIEWING):
-            old_assignee, stage = state_machine.reclaim_review(item), "review"
+        if stage == "annotation":
+            old_assignee = state_machine.reclaim_annotation(item)
         else:
-            raise HTTPException(status_code=409, detail="当前状态不可回收")
+            old_assignee = state_machine.reclaim_review(item)
     except InvalidTransition as exc:
         raise HTTPException(status_code=409, detail="当前状态不可回收") from exc
     db.add(

@@ -1,9 +1,20 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TaskItem, User } from "../../shared/api/types";
 import { PackageItemsPage } from "./PackageItemsPage";
+
+const shellUser = vi.hoisted(() => ({
+  current: {
+    id: "manager-1",
+    username: "manager",
+    display_name: "管理员",
+    role: "annotation_manager",
+    is_active: true,
+    must_change_password: false,
+  },
+}));
 
 const users: User[] = [
   {
@@ -33,14 +44,7 @@ vi.mock("../../app/shellContext", async (importOriginal) => {
   return {
     ...actual,
     useShell: () => ({
-      user: {
-        id: "manager-1",
-        username: "manager",
-        display_name: "管理员",
-        role: "annotation_manager",
-        is_active: true,
-        must_change_password: false,
-      },
+      user: shellUser.current,
       projects: [],
       projectId: "project-1",
       setProjectId: vi.fn(),
@@ -63,7 +67,15 @@ vi.mock("../users/api", () => ({
   },
 }));
 
-it("shows assignee name and username instead of a truncated user id", async () => {
+beforeEach(() => {
+  shellUser.current = {
+    id: "manager-1",
+    username: "manager",
+    display_name: "管理员",
+    role: "annotation_manager",
+    is_active: true,
+    must_change_password: false,
+  };
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -77,6 +89,13 @@ it("shows assignee name and username instead of a truncated user id", async () =
       dispatchEvent: vi.fn(),
     })),
   });
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -89,8 +108,28 @@ it("shows assignee name and username instead of a truncated user id", async () =
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+it("shows assignee name and username instead of a truncated user id", async () => {
+  renderPage();
 
   expect(await screen.findByText("张三")).toBeVisible();
   expect(screen.getByText("@zhangsan")).toBeVisible();
   expect(screen.queryByText("user-1".slice(0, 8))).not.toBeInTheDocument();
+});
+
+it("lets outsourcing managers reclaim visible group assignees", async () => {
+  shellUser.current = {
+    id: "outsourcing-manager-1",
+    username: "outsourcing-manager",
+    display_name: "合作方负责人",
+    role: "outsourcing_manager",
+    is_active: true,
+    must_change_password: false,
+  };
+  renderPage();
+
+  expect(await screen.findByRole("button", { name: "查看详情" })).toBeVisible();
+  expect(screen.getByRole("button", { name: /回\s*收/ })).toBeVisible();
+  expect(screen.queryByText("批量指派 (0)")).not.toBeInTheDocument();
 });

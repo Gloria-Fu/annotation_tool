@@ -20,6 +20,7 @@ from app.features.task_packages.service import (
     create_package,
     list_items,
     list_packages,
+    reclaim_item,
     remove_package_group,
 )
 from app.features.users.service import create_user, delete_user, list_users, update_user
@@ -57,6 +58,7 @@ from app.schemas import (
     PackageCreate,
     QualityBatchCreate,
     QualityInput,
+    ReclaimRequest,
     ReviewInput,
     RevisionInput,
     TaskPackageGroupCreate,
@@ -494,6 +496,87 @@ def test_outsourcing_manager_is_scoped_to_managed_groups_and_can_view_items(
     with pytest.raises(HTTPException) as self_reset:
         update_user(manager.id, UserUpdate(reset_password="self-password-1234"), manager, db)
     assert self_reset.value.status_code == 400
+
+
+def test_outsourcing_manager_can_reclaim_managed_group_assignments(db, tmp_path, monkeypatch):
+    admin, _, _, package, item = setup_item(db, tmp_path, monkeypatch)
+    manager = make_user(db, "outsourcing-reclaim-manager", Role.OUTSOURCING_MANAGER)
+    annotator = make_user(db, "managed-reclaim-annotator", Role.ANNOTATOR)
+    reviewer = make_user(db, "managed-reclaim-reviewer", Role.REVIEWER)
+    group = UserGroup(name="Reclaim team", created_by_id=admin.id, manager_id=manager.id)
+    db.add(group)
+    db.flush()
+    db.add_all(
+        [
+            UserGroupMember(group_id=group.id, user_id=annotator.id),
+            UserGroupMember(group_id=group.id, user_id=reviewer.id),
+        ]
+    )
+    db.commit()
+    add_package_group(package.id, TaskPackageGroupCreate(group_id=group.id), admin, db)
+
+    claimed = claim(package.id, annotator, False, db)
+    reclaimed = reclaim_item(
+        claimed.id,
+        ReclaimRequest(reason="合作方负责人回收标注任务"),
+        manager,
+        db,
+    )
+    assert reclaimed.id == item.id
+    assert reclaimed.status == ItemStatus.AVAILABLE
+    assert reclaimed.annotator_id is None
+
+    item.annotator_id = annotator.id
+    item.reviewer_id = reviewer.id
+    item.status = ItemStatus.REVIEW_ASSIGNED
+    db.commit()
+    reclaimed_review = reclaim_item(
+        item.id,
+        ReclaimRequest(reason="合作方负责人回收审核任务"),
+        manager,
+        db,
+    )
+    assert reclaimed_review.status == ItemStatus.REVIEW_PENDING
+    assert reclaimed_review.reviewer_id is None
+    assert reclaimed_review.annotator_id == annotator.id
+
+
+def test_outsourcing_manager_cannot_reclaim_other_group_assignments(db, tmp_path, monkeypatch):
+    admin, _, _, package, item = setup_item(db, tmp_path, monkeypatch)
+    manager = make_user(db, "scoped-reclaim-manager", Role.OUTSOURCING_MANAGER)
+    other_manager = make_user(db, "other-scoped-reclaim-manager", Role.OUTSOURCING_MANAGER)
+    managed_worker = make_user(db, "scoped-reclaim-worker", Role.ANNOTATOR)
+    other_worker = make_user(db, "other-scoped-reclaim-worker", Role.ANNOTATOR)
+    own_group = UserGroup(name="Scoped reclaim team", created_by_id=admin.id, manager_id=manager.id)
+    other_group = UserGroup(
+        name="Other scoped reclaim team",
+        created_by_id=admin.id,
+        manager_id=other_manager.id,
+    )
+    db.add_all([own_group, other_group])
+    db.flush()
+    db.add_all(
+        [
+            UserGroupMember(group_id=own_group.id, user_id=managed_worker.id),
+            UserGroupMember(group_id=other_group.id, user_id=other_worker.id),
+        ]
+    )
+    db.commit()
+    add_package_group(package.id, TaskPackageGroupCreate(group_id=own_group.id), admin, db)
+
+    item.annotator_id = other_worker.id
+    item.status = ItemStatus.ANNOTATING
+    db.commit()
+
+    with pytest.raises(HTTPException) as forbidden:
+        reclaim_item(
+            item.id,
+            ReclaimRequest(reason="不能回收非本组任务"),
+            manager,
+            db,
+        )
+    assert forbidden.value.status_code == 403
+    assert forbidden.value.detail == "只能回收自己负责群组成员领取的任务"
 
 
 def test_developer_admin_can_reset_password_but_annotation_manager_cannot(
