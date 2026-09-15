@@ -622,7 +622,7 @@ export function SegmentEditor({
               </Button>
             )}
           </div>
-        ) : segmentValidity === "valid" && definition ? (
+        ) : segmentValidity === "valid" && fine.outcome !== "failure" && definition ? (
           <div className="keyframe-point-control">
             <div>
               <Typography.Text strong>关键帧位置</Typography.Text>

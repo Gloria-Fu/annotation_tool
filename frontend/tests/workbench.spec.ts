@@ -502,6 +502,8 @@ test("Pick failure stores a structured reason and creates a clean retry segment"
   await expect(page.getByRole("region", { name: "失败事件面板" })).toBeVisible();
   await expect(page.getByRole("region", { name: "标注句编辑器" })).toHaveCount(0);
   await expect(page.getByText("失败关键帧", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("关键帧位置", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "标记关键点", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "标记左手", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "确认标注结果" })).toBeEnabled();
   await expect(
