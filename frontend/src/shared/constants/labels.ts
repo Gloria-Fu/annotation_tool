@@ -3,7 +3,7 @@ import type { Role } from "../api/types";
 export const roleLabels: Record<Role, string> = {
   developer_admin: "研发管理员",
   annotation_manager: "标注管理员",
-  outsourcing_manager: "外包负责人",
+  outsourcing_manager: "合作方负责人",
   reviewer: "审核员",
   annotator: "标注员",
 };

@@ -56,9 +56,11 @@ def create_user(payload: UserCreate, actor: User, db: Session) -> User:
             raise HTTPException(status_code=403, detail="只能将账号加入自己管理的项目")
     if actor.role == Role.OUTSOURCING_MANAGER:
         if payload.role not in (Role.ANNOTATOR, Role.REVIEWER):
-            raise HTTPException(status_code=403, detail="外包负责人只能创建标注员或审核员")
+            raise HTTPException(status_code=403, detail="合作方负责人只能创建标注员或审核员")
         if payload.project_ids:
-            raise HTTPException(status_code=403, detail="外包账号通过人员群组授权，不直接加入项目")
+            raise HTTPException(
+                status_code=403, detail="合作方账号通过人员群组授权，不直接加入项目"
+            )
         if not payload.group_ids or not set(payload.group_ids).issubset(
             managed_group_ids(db, actor)
         ):

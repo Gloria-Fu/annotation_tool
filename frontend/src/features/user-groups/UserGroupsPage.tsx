@@ -107,7 +107,7 @@ export function UserGroupsPage() {
               dataIndex: "manager_id",
               render: (managerId: string | null) => {
                 const manager = users.find((candidate) => candidate.id === managerId);
-                return manager ? manager.display_name : managerId ? "外包负责人" : "未指定";
+                return manager ? manager.display_name : managerId ? "合作方负责人" : "未指定";
               },
             },
             { title: "成员数", dataIndex: "member_count" },
@@ -190,15 +190,15 @@ export function UserGroupsPage() {
           onFinish={(values) => save.mutate(values)}
         >
           <Form.Item name="name" label="群组名称" rules={[{ required: true }]}>
-            <Input placeholder="例如：OLA 组、外包 A 组" />
+            <Input placeholder="例如：OLA 组、合作方 A 组" />
           </Form.Item>
           <Form.Item name="description" label="说明">
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="manager_id" label="外包负责人">
+          <Form.Item name="manager_id" label="合作方负责人">
             <Select
               allowClear
-              placeholder="可选，指定负责该群组的外包负责人"
+              placeholder="可选，指定负责该群组的合作方负责人"
               options={users
                 .filter((candidate) => candidate.role === "outsourcing_manager")
                 .map((candidate) => ({

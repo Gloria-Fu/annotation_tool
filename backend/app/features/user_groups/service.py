@@ -60,7 +60,7 @@ def create_group(payload: UserGroupCreate, actor: User, db: Session) -> UserGrou
     if payload.manager_id:
         manager = db.get(User, payload.manager_id)
         if not manager or manager.is_deleted or manager.role != Role.OUTSOURCING_MANAGER:
-            raise HTTPException(status_code=400, detail="群组负责人必须是有效的外包负责人账号")
+            raise HTTPException(status_code=400, detail="群组负责人必须是有效的合作方负责人账号")
     group = UserGroup(
         name=payload.name.strip(),
         description=payload.description.strip() if payload.description else None,
@@ -94,7 +94,9 @@ def update_group(group_id: str, payload: UserGroupUpdate, actor: User, db: Sessi
         if payload.manager_id:
             manager = db.get(User, payload.manager_id)
             if not manager or manager.is_deleted or manager.role != Role.OUTSOURCING_MANAGER:
-                raise HTTPException(status_code=400, detail="群组负责人必须是有效的外包负责人账号")
+                raise HTTPException(
+                    status_code=400, detail="群组负责人必须是有效的合作方负责人账号"
+                )
         group.manager_id = payload.manager_id
     try:
         db.flush()
