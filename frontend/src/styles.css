@@ -440,6 +440,15 @@ body {
   border: 1px solid var(--app-line);
   padding: 16px;
 }
+.user-groups-table .ant-table-cell {
+  vertical-align: top;
+}
+.user-groups-table .user-groups-actions-cell {
+  white-space: nowrap;
+}
+.user-groups-table .user-groups-actions-cell .ant-space {
+  flex-wrap: nowrap;
+}
 .workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;

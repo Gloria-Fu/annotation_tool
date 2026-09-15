@@ -96,24 +96,28 @@ export function UserGroupsPage() {
       />
       <div className="table-panel">
         <Table<UserGroup>
+          className="user-groups-table"
           rowKey="id"
           loading={isLoading}
           dataSource={groups}
+          scroll={{ x: 1160 }}
           columns={[
-            { title: "群组名称", dataIndex: "name" },
-            { title: "说明", dataIndex: "description", ellipsis: true },
+            { title: "群组名称", dataIndex: "name", width: 160 },
+            { title: "说明", dataIndex: "description", width: 220, ellipsis: true },
             {
               title: "负责人",
               dataIndex: "manager_id",
+              width: 170,
               render: (managerId: string | null) => {
                 const manager = users.find((candidate) => candidate.id === managerId);
                 return manager ? manager.display_name : managerId ? "合作方负责人" : "未指定";
               },
             },
-            { title: "成员数", dataIndex: "member_count" },
+            { title: "成员数", dataIndex: "member_count", width: 100 },
             {
               title: "成员",
               dataIndex: "members",
+              width: 330,
               render: (members: UserGroup["members"]) => (
                 <Space wrap size={[4, 4]}>
                   {members.slice(0, 5).map((member) => (
@@ -125,6 +129,8 @@ export function UserGroupsPage() {
             },
             {
               title: "操作",
+              width: 300,
+              onCell: () => ({ className: "user-groups-actions-cell" }),
               render: (_, row) => (
                 <Space>
                   <Button
