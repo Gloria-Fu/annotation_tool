@@ -2,6 +2,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from app.core.auth import verify_password
 from app.features.projects.service import list_projects
 from app.features.quality.service import (
     check as quality_check,
@@ -391,6 +392,7 @@ def test_group_authorized_package_replaces_project_membership_access(db, tmp_pat
 def test_outsourcing_manager_is_scoped_to_managed_groups_and_can_view_items(
     db, tmp_path, monkeypatch
 ):
+    monkeypatch.setattr("app.features.users.service.delete_user_sessions", lambda _user_id: None)
     admin, _, _, package, item = setup_item(db, tmp_path, monkeypatch)
     manager = make_user(db, "outsourcing-manager", Role.OUTSOURCING_MANAGER)
     other_manager = make_user(db, "other-outsourcing-manager", Role.OUTSOURCING_MANAGER)
@@ -485,6 +487,42 @@ def test_outsourcing_manager_is_scoped_to_managed_groups_and_can_view_items(
         )
     update_user(worker.id, UserUpdate(display_name="Managed Worker Updated"), manager, db)
     assert db.get(User, worker.id).display_name == "Managed Worker Updated"
+    update_user(worker.id, UserUpdate(reset_password="new-password-1234"), manager, db)
+    db.refresh(worker)
+    assert worker.must_change_password is True
+    assert verify_password(worker.password_hash, "new-password-1234")
+    with pytest.raises(HTTPException) as self_reset:
+        update_user(manager.id, UserUpdate(reset_password="self-password-1234"), manager, db)
+    assert self_reset.value.status_code == 400
+
+
+def test_developer_admin_can_reset_password_but_annotation_manager_cannot(
+    db, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("app.features.users.service.delete_user_sessions", lambda _user_id: None)
+    admin, _, _, package, _ = setup_item(db, tmp_path, monkeypatch)
+    manager = make_user(db, "annotation-manager-reset", Role.ANNOTATION_MANAGER)
+    target = make_user(db, "reset-target", Role.ANNOTATOR)
+    db.add_all(
+        [
+            ProjectMember(project_id=package.project_id, user_id=manager.id),
+            ProjectMember(project_id=package.project_id, user_id=target.id),
+        ]
+    )
+    db.commit()
+
+    with pytest.raises(HTTPException) as forbidden:
+        update_user(target.id, UserUpdate(reset_password="manager-password-1234"), manager, db)
+    assert forbidden.value.status_code == 403
+
+    update_user(target.id, UserUpdate(reset_password="admin-password-1234"), admin, db)
+    db.refresh(target)
+    assert target.must_change_password is True
+    assert verify_password(target.password_hash, "admin-password-1234")
+
+    with pytest.raises(HTTPException) as self_reset:
+        update_user(admin.id, UserUpdate(reset_password="self-password-1234"), admin, db)
+    assert self_reset.value.status_code == 400
 
 
 def test_unauthorized_user_cannot_list_or_open_group_package(db, tmp_path, monkeypatch):

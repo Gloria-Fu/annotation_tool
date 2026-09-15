@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Form, Input, Modal, Select, Space, Table, Tag, message } from "antd";
-import { Plus } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
 import { useShell } from "../../app/shellContext";
 import { ApiError } from "../../shared/api/client";
 import type { Role, User } from "../../shared/api/types";
@@ -18,6 +18,8 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [resetForm] = Form.useForm<{ password: string; confirm_password: string }>();
   const { data = [] } = useQuery({ queryKey: queryKeys.users, queryFn: usersApi.list });
   const { data: groups = [] } = useQuery({
     queryKey: queryKeys.userGroups,
@@ -46,6 +48,17 @@ export function UsersPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.users }),
     onError: (error: ApiError) => message.error(error.message),
   });
+  const resetPassword = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      usersApi.update(id, { reset_password: password }),
+    onSuccess: () => {
+      message.success("密码已重置，用户下次登录需修改密码");
+      setResetTarget(null);
+      resetForm.resetFields();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+    },
+    onError: (error: ApiError) => message.error(error.message),
+  });
   const remove = useMutation({
     mutationFn: (id: string) => usersApi.remove(id),
     onSuccess: () => {
@@ -63,6 +76,7 @@ export function UsersPage() {
           { value: "reviewer", label: roleLabels.reviewer },
         ];
   const isOutsourcingManager = user.role === "outsourcing_manager";
+  const canResetPassword = user.role === "developer_admin" || user.role === "outsourcing_manager";
 
   return (
     <>
@@ -104,6 +118,19 @@ export function UsersPage() {
                   >
                     {row.is_active ? "停用" : "启用"}
                   </Button>
+                  {canResetPassword && (
+                    <Button
+                      size="small"
+                      icon={<KeyRound size={14} />}
+                      disabled={row.id === user.id}
+                      onClick={() => {
+                        resetForm.resetFields();
+                        setResetTarget(row);
+                      }}
+                    >
+                      重置密码
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     danger
@@ -166,6 +193,53 @@ export function UsersPage() {
           <Button type="primary" htmlType="submit" loading={create.isPending}>
             创建
           </Button>
+        </Form>
+      </Modal>
+      <Modal
+        open={!!resetTarget}
+        title={resetTarget ? `重置 ${resetTarget.username} 的密码` : "重置密码"}
+        okText="确认重置"
+        cancelText="取消"
+        confirmLoading={resetPassword.isPending}
+        onCancel={() => {
+          if (!resetPassword.isPending) {
+            setResetTarget(null);
+            resetForm.resetFields();
+          }
+        }}
+        onOk={() => resetForm.submit()}
+      >
+        <Form
+          form={resetForm}
+          layout="vertical"
+          onFinish={(values) => {
+            if (!resetTarget) return;
+            resetPassword.mutate({ id: resetTarget.id, password: values.password });
+          }}
+        >
+          <Form.Item
+            name="password"
+            label="新密码"
+            rules={[{ required: true, min: 10, message: "密码至少 10 位" }]}
+          >
+            <Input.Password />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label="确认新密码"
+            dependencies={["password"]}
+            rules={[
+              { required: true, message: "请再次输入新密码" },
+              ({ getFieldValue }) => ({
+                validator(_, value: string | undefined) {
+                  if (!value || getFieldValue("password") === value) return Promise.resolve();
+                  return Promise.reject(new Error("两次输入的密码不一致"));
+                },
+              }),
+            ]}
+          >
+            <Input.Password />
+          </Form.Item>
         </Form>
       </Modal>
       <Modal

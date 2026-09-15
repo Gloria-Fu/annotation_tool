@@ -99,6 +99,13 @@ def update_user(user_id: str, payload: UserUpdate, actor: User, db: Session) -> 
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="账号不存在")
+    if payload.reset_password and target.id == actor.id:
+        raise HTTPException(status_code=400, detail="不能重置当前登录账号密码")
+    if payload.reset_password and actor.role not in (
+        Role.DEVELOPER_ADMIN,
+        Role.OUTSOURCING_MANAGER,
+    ):
+        raise HTTPException(status_code=403, detail="无权重置账号密码")
     if actor.role == Role.ANNOTATION_MANAGER:
         manageable = manageable_project_ids(db, actor)
         target_projects = set(
