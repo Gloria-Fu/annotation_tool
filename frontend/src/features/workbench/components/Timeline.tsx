@@ -111,7 +111,7 @@ export function Timeline({
           <div
             key={segment.id}
             data-segment-id={segment.id}
-            className={`timeline-segment outcome-${currentFineAnnotation(segment).outcome} ${segment.id === selectedId ? "active" : ""}`}
+            className={`timeline-segment outcome-${currentFineAnnotation(segment).outcome} validity-${currentFineAnnotation(segment).segment_validity} ${segment.id === selectedId ? "active" : ""}`}
             style={{
               left: `${frameToPercent(segment.start_frame, length)}%`,
               width: `${frameToPercent(segment.end_frame - segment.start_frame, length)}%`,
@@ -133,15 +133,21 @@ export function Timeline({
                 const fine = currentFineAnnotation(segment);
                 const skill = fine.skill || segment.skill || "";
                 const definition = getSkillDefinition(skill);
-                const outcome =
-                  fine.outcome === "failure"
-                    ? "失败"
-                    : fine.outcome === "success"
-                      ? "成功"
-                      : "待判定";
+                const status =
+                  fine.segment_validity === "invalid"
+                    ? "无效片段"
+                    : fine.segment_validity === "pending"
+                      ? "待判定"
+                      : fine.outcome === "failure"
+                        ? "失败"
+                        : fine.outcome === "success"
+                          ? "成功"
+                          : "待判定";
                 return definition
-                  ? `${definition.label} (${definition.name}) · ${outcome}`
-                  : "未选择 Skill";
+                  ? `${definition.label} (${definition.name}) · ${status}`
+                  : status === "无效片段"
+                    ? "无效片段"
+                    : "未选择 Skill";
               })()}
             </span>
             {index > 0 && (

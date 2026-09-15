@@ -32,6 +32,7 @@ const RETRY_RESET_KEYS = new Set([
   "approach",
   "reference",
   "orientation",
+  "release_mode",
   "contact_point",
   "gripper_action",
   "pick_relative_object",
@@ -150,6 +151,7 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
             target_point_label: undefined,
             keyframe_point: undefined,
             keyframe_points: undefined,
+            keyframe_frame: undefined,
             gripper_keyframes: undefined,
             template_values: Object.fromEntries(
               Object.entries(fine.template_values || {}).filter(

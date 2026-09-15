@@ -1,4 +1,4 @@
-import { Crosshair, RotateCcw } from "lucide-react";
+import { Crosshair, Flag, RotateCcw } from "lucide-react";
 import { Button, Input, Modal, Segmented, Select, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import type {
@@ -7,6 +7,7 @@ import type {
   Segment,
   GripperKeyframe,
   OperatorHand,
+  SegmentValidity,
 } from "../../../shared/api/types";
 import { annotationHands, handLabel, completeGripper } from "../model/gripperKeyframes";
 import { durationSeconds, formatFrameTime } from "../model/timelineMath";
@@ -14,16 +15,27 @@ import {
   currentFineAnnotation,
   fineAnnotationPreview,
   fineAnnotationText,
+  placeKeyframeFrame,
   templateIssues,
 } from "../model/fineAnnotation";
-import { getSkillDefinition, sentenceFieldValue, sentenceTokens } from "../skillDefinitions";
+import {
+  getSkillDefinition,
+  isSeparateObjectMode,
+  OBJECT_TARGET_MODE_OPTIONS,
+  defaultLiftGripperForOperatorHand,
+  sentenceFieldValue,
+  sentenceTokens,
+  withSkillTemplateDefaults,
+} from "../skillDefinitions";
 import { isSkillEnabled, SKILL_OPTIONS } from "../skillAvailability";
 import { FAILURE_REASON_OPTIONS, failureReasonLabel } from "../failureReasons";
+import { INVALID_SEGMENT_REASON_OPTIONS, SEGMENT_VALIDITY_OPTIONS } from "../segmentValidity";
 
 export function SegmentEditor({
   selected,
   reviewing,
   fps,
+  currentFrame,
   pointMarking,
   onBeginPointMark,
   onBeginGripperMark,
@@ -46,6 +58,7 @@ export function SegmentEditor({
   selected?: Segment;
   reviewing: boolean;
   fps: number;
+  currentFrame: number;
   pointMarking: boolean;
   onBeginPointMark: (
     onMarked: (point: NonNullable<FineAnnotation["keyframe_point"]>) => void,
@@ -83,20 +96,45 @@ export function SegmentEditor({
     onFineChange(next, fineAnnotationText(next));
   };
   const definition = getSkillDefinition(fine.skill || selected.skill || "");
-  const enabled = !readOnly && isSkillEnabled(fine.skill || selected.skill || "");
+  const selectedSkill = fine.skill || selected.skill || "";
+  const enabled = !readOnly && (!selectedSkill || isSkillEnabled(selectedSkill));
   const values = fine.template_values || {};
   const issues = templateIssues(selected);
-  const updateValue = (key: string, value: string) =>
+  const isPickOrPlace = definition?.name === "Pick" || definition?.name === "Place";
+  const updateValue = (key: string, value: string) => {
+    const nextValues = { ...values, [key]: value };
+    if (key === "operator_hand" && isPickOrPlace) {
+      const previousDefault = defaultLiftGripperForOperatorHand(values.operator_hand);
+      const nextDefault = defaultLiftGripperForOperatorHand(value);
+      if (
+        (!values.lift_gripper?.trim() || values.lift_gripper === previousDefault) &&
+        nextDefault
+      ) {
+        nextValues.lift_gripper = nextDefault;
+      }
+    }
     update({
       skill: definition?.name,
       template_version: 1,
-      template_values: { ...values, [key]: value },
+      template_values: withSkillTemplateDefaults(definition?.name || "", nextValues),
     });
-  const isPickOrPlace = definition?.name === "Pick" || definition?.name === "Place";
+  };
+  const segmentValidity = fine.segment_validity || "pending";
+  const isInvalidSegment = segmentValidity === "invalid";
+  const objectTargetMode = isSeparateObjectMode(definition?.name || "", values)
+    ? "separate_objects"
+    : "same_object";
+  const showObjectTargetMode = isPickOrPlace && values.operator_hand === "双手";
   const updateOutcome = (outcome: AnnotationOutcome) =>
     update(
       outcome === "failure"
-        ? { outcome }
+        ? {
+            outcome,
+            keyframe_point: undefined,
+            keyframe_points: undefined,
+            keyframe_frame: undefined,
+            gripper_keyframes: undefined,
+          }
         : {
             outcome,
             failure_reason: "",
@@ -105,6 +143,22 @@ export function SegmentEditor({
             failure_detail: undefined,
           },
     );
+  const updateSegmentValidity = (segment_validity: SegmentValidity) =>
+    update({
+      segment_validity,
+      invalid_reason_code: segment_validity === "invalid" ? fine.invalid_reason_code : undefined,
+      invalid_reason_detail:
+        segment_validity === "invalid" ? fine.invalid_reason_detail : undefined,
+    });
+  const updateInvalidReason = (
+    invalid_reason_code: (typeof INVALID_SEGMENT_REASON_OPTIONS)[number]["value"],
+  ) =>
+    update({
+      segment_validity: "invalid",
+      invalid_reason_code,
+      invalid_reason_detail:
+        invalid_reason_code === "other" ? fine.invalid_reason_detail : undefined,
+    });
   const updateFailureReason = (
     failure_reason_code: (typeof FAILURE_REASON_OPTIONS)[number]["value"],
   ) => {
@@ -119,15 +173,19 @@ export function SegmentEditor({
       failure_reason: failureReasonLabel(failure_reason_code, failure_direction, failure_detail),
     });
   };
-  const keyframeDefinitionText =
-    fine.outcome === "failure" && isPickOrPlace
-      ? "本次尝试确认失败的 HEAD 画面"
-      : definition?.keyframeDefinition;
-  const requiredObjectsText =
-    fine.outcome === "failure" && isPickOrPlace
-      ? "可选：本次失败帧中操作手夹爪的左夹和右夹位置；看不见的夹指标为不可见"
-      : definition?.requiredObjects.join("、");
+  const keyframeDefinitionText = definition?.keyframeDefinition;
+  const requiredObjectsText = definition?.requiredObjects.join("、");
   const beginPointMark = () => onBeginPointMark((keyframe_point) => update({ keyframe_point }));
+  const recordedPlaceKeyframeFrame = placeKeyframeFrame(fine);
+  const recordPlaceKeyframe = () => {
+    if (currentFrame < selected.start_frame || currentFrame >= selected.end_frame) return;
+    update({
+      keyframe_frame: currentFrame,
+      keyframe_point: undefined,
+      keyframe_points: undefined,
+      gripper_keyframes: undefined,
+    });
+  };
   return (
     <aside className="segment-editor">
       <div className="editor-heading">
@@ -198,31 +256,102 @@ export function SegmentEditor({
           {formatFrameTime(selected.start_frame, fps)} - {formatFrameTime(selected.end_frame, fps)}{" "}
           · 时长 {durationSeconds(selected.start_frame, selected.end_frame, fps).toFixed(2)} 秒
         </div>
-        <label className="sentence-field sentence-skill">
-          <span>技能</span>
-          <Select
-            aria-label="技能"
-            value={fine.skill || selected.skill || undefined}
-            options={SKILL_OPTIONS}
-            onChange={(skill) =>
-              update({
-                skill,
-                template_version: 1,
-                template_values: values,
-                keyframe_point: undefined,
-                keyframe_points: undefined,
-                gripper_keyframes: undefined,
-              })
-            }
-            placeholder="选择技能"
-          />
-        </label>
-        {!readOnly && !enabled && (
-          <Typography.Text type="warning">
-            {fine.skill || selected.skill ? "该 Skill 暂未开放，请选择其他技能" : "请选择技能"}
-          </Typography.Text>
+        {!isInvalidSegment && (
+          <>
+            <label className="sentence-field sentence-skill">
+              <span>技能</span>
+              <Select
+                aria-label="技能"
+                value={fine.skill || selected.skill || undefined}
+                options={SKILL_OPTIONS}
+                disabled={!enabled}
+                onChange={(skill) =>
+                  update({
+                    skill,
+                    template_version: 1,
+                    template_values: withSkillTemplateDefaults(skill, values),
+                    keyframe_point: undefined,
+                    keyframe_points: undefined,
+                    keyframe_frame: undefined,
+                    gripper_keyframes: undefined,
+                  })
+                }
+                placeholder="选择技能"
+              />
+            </label>
+            {!readOnly && selectedSkill && !enabled && (
+              <Typography.Text type="warning">
+                {fine.skill || selected.skill ? "该 Skill 暂未开放，请选择其他技能" : "请选择技能"}
+              </Typography.Text>
+            )}
+          </>
         )}
-        {isPickOrPlace && (
+        <section
+          className={`attempt-outcome segment-validity-panel outcome-${segmentValidity}`}
+          aria-label="片段处理结果"
+        >
+          <div className="attempt-outcome-heading">
+            <div className="attempt-outcome-title">
+              <Typography.Text strong>片段处理结果</Typography.Text>
+              <Typography.Text type="secondary">
+                无动作、静止或采集异常的片段请选择“无效片段”。
+              </Typography.Text>
+            </div>
+            <Segmented
+              value={segmentValidity}
+              disabled={!enabled}
+              options={SEGMENT_VALIDITY_OPTIONS}
+              onChange={(value) => {
+                if (value === "pending" || value === "valid" || value === "invalid")
+                  updateSegmentValidity(value);
+              }}
+            />
+          </div>
+        </section>
+        {isInvalidSegment && (
+          <section className="failure-event-panel invalid-segment-panel" aria-label="无效片段面板">
+            <div className="failure-event-heading">
+              <Typography.Text strong>无效片段原因</Typography.Text>
+              <Typography.Text type="secondary">
+                无效片段不需要选择技能、填写动作结果或标记关键帧。
+              </Typography.Text>
+            </div>
+            <div className="failure-fields">
+              <label className="sentence-field">
+                <span>无效原因 *</span>
+                <Select
+                  disabled={!enabled}
+                  aria-label="无效原因"
+                  value={fine.invalid_reason_code}
+                  placeholder="选择无效原因"
+                  options={INVALID_SEGMENT_REASON_OPTIONS}
+                  onChange={updateInvalidReason}
+                />
+              </label>
+              <label className="sentence-field failure-detail-field">
+                <span>
+                  {fine.invalid_reason_code === "other" ? "无效原因说明 *" : "补充说明（选填）"}
+                </span>
+                <Input.TextArea
+                  disabled={!enabled}
+                  aria-label={
+                    fine.invalid_reason_code === "other" ? "无效原因说明" : "无效片段补充说明"
+                  }
+                  value={fine.invalid_reason_detail || ""}
+                  placeholder="如：整段画面没有发生可标注动作"
+                  rows={3}
+                  onChange={(event) =>
+                    update({
+                      segment_validity: "invalid",
+                      invalid_reason_detail: event.target.value,
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </section>
+        )}
+        {segmentValidity === "valid" && isPickOrPlace && (
           <section className={`attempt-outcome outcome-${fine.outcome}`} aria-label="本次尝试结果">
             <div className="attempt-outcome-heading">
               <Typography.Text strong>本次尝试结果</Typography.Text>
@@ -242,7 +371,7 @@ export function SegmentEditor({
             </div>
           </section>
         )}
-        {fine.outcome === "failure" && isPickOrPlace && (
+        {segmentValidity === "valid" && fine.outcome === "failure" && isPickOrPlace && (
           <section className="failure-event-panel" aria-label="失败事件面板">
             <div className="failure-event-heading">
               <Typography.Text strong>失败事件记录</Typography.Text>
@@ -329,8 +458,27 @@ export function SegmentEditor({
             </div>
           </section>
         )}
-        {fine.outcome !== "failure" && definition && (
+        {segmentValidity === "valid" && fine.outcome !== "failure" && definition && (
           <div className="sentence-editor" aria-label="标注句编辑器">
+            {showObjectTargetMode && (
+              <section className="object-target-mode" aria-label="双手目标模式">
+                <div>
+                  <Typography.Text strong>双手目标模式</Typography.Text>
+                  <Typography.Text type="secondary">
+                    同步操作同一目标时保持原句式；左右手分别操作不同目标时拆开填写。
+                  </Typography.Text>
+                </div>
+                <Segmented
+                  disabled={!enabled}
+                  value={objectTargetMode}
+                  options={OBJECT_TARGET_MODE_OPTIONS}
+                  onChange={(value) => {
+                    if (value === "same_object" || value === "separate_objects")
+                      updateValue("object_mode", value);
+                  }}
+                />
+              </section>
+            )}
             <div className="skill-sentence">
               {sentenceTokens(definition.name, values).map((token, index) =>
                 typeof token === "string" ? (
@@ -366,7 +514,7 @@ export function SegmentEditor({
             </div>
           </div>
         )}
-        {definition && fine.outcome !== "failure" && (
+        {segmentValidity === "valid" && definition && fine.outcome !== "failure" && (
           <div className="skill-guidance">
             <div>
               <Typography.Text type="secondary">关键帧定义</Typography.Text>
@@ -378,28 +526,11 @@ export function SegmentEditor({
             </div>
           </div>
         )}
-        {definition && fine.outcome === "failure" && (
-          <div className="skill-guidance failure-keyframe-guidance">
-            <div>
-              <Typography.Text type="secondary">失败关键帧（选填）</Typography.Text>
-              <p>{keyframeDefinitionText}</p>
-            </div>
-            <div>
-              <Typography.Text type="secondary">需要标记</Typography.Text>
-              <p>{requiredObjectsText}</p>
-            </div>
-          </div>
-        )}
-        {definition?.name === "Pick" || definition?.name === "Place" ? (
+        {segmentValidity === "valid" &&
+        fine.outcome !== "failure" &&
+        definition?.name === "Pick" ? (
           <div>
-            <Typography.Text strong>
-              {fine.outcome === "failure" ? "失败关键帧（选填）" : "关键帧位置"}
-            </Typography.Text>
-            {fine.outcome === "failure" && (
-              <Typography.Text type="secondary">
-                能确认时记录失败的 HEAD 帧；无法确认时可留空
-              </Typography.Text>
-            )}
+            <Typography.Text strong>关键帧位置</Typography.Text>
             {annotationHands(fine).length === 0 && (
               <Typography.Text type="secondary">请先选择操作手</Typography.Text>
             )}
@@ -455,7 +586,43 @@ export function SegmentEditor({
               );
             })}
           </div>
-        ) : (
+        ) : segmentValidity === "valid" &&
+          fine.outcome !== "failure" &&
+          definition?.name === "Place" ? (
+          <div className="keyframe-point-control">
+            <div>
+              <Typography.Text strong>关键帧帧号</Typography.Text>
+              <Typography.Text type="secondary">
+                {recordedPlaceKeyframeFrame !== undefined
+                  ? `帧 ${recordedPlaceKeyframeFrame}`
+                  : "尚未记录，请将播放头定位到夹爪完全打开的时刻"}
+              </Typography.Text>
+              <Typography.Text type="secondary">只记录帧号，不标记左夹和右夹位置</Typography.Text>
+            </div>
+            <Button
+              icon={
+                recordedPlaceKeyframeFrame !== undefined ? (
+                  <RotateCcw size={15} />
+                ) : (
+                  <Flag size={15} />
+                )
+              }
+              disabled={
+                !enabled ||
+                currentFrame < selected.start_frame ||
+                currentFrame >= selected.end_frame
+              }
+              onClick={recordPlaceKeyframe}
+            >
+              {recordedPlaceKeyframeFrame !== undefined ? "重新记录当前帧" : "记录当前帧"}
+            </Button>
+            {recordedPlaceKeyframeFrame !== undefined && (
+              <Button size="small" onClick={() => onJumpFrame(recordedPlaceKeyframeFrame)}>
+                跳转到此帧
+              </Button>
+            )}
+          </div>
+        ) : segmentValidity === "valid" && definition ? (
           <div className="keyframe-point-control">
             <div>
               <Typography.Text strong>关键帧位置</Typography.Text>
@@ -474,8 +641,8 @@ export function SegmentEditor({
               {pointMarking ? "请点击左侧画面" : fine.keyframe_point ? "重新标记" : "标记关键点"}
             </Button>
           </div>
-        )}
-        {selected.retry_of && (
+        ) : null}
+        {segmentValidity === "valid" && selected.retry_of && (
           <section className="retry-context" aria-label="重试信息">
             <Typography.Text strong>重试信息</Typography.Text>
             <Typography.Text type="secondary">本片段从上一段失败后的状态开始。</Typography.Text>

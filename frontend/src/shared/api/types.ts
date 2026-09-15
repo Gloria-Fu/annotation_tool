@@ -51,6 +51,9 @@ export type KeyframePoint = { frame: number; view: string; x: number; y: number 
 export type OperatorHand = "left" | "right";
 export type JawMark = { visibility: "visible"; x: number; y: number } | { visibility: "invisible" };
 export type AnnotationOutcome = "pending" | "success" | "failure";
+export type SegmentValidity = "pending" | "valid" | "invalid";
+export type InvalidSegmentReasonCode =
+  "no_motion" | "bad_segmentation" | "visual_issue" | "duplicate" | "other";
 export type FailureReasonCode =
   "gripper_closed_early" | "gripper_deviated" | "object_dropped" | "failed_to_grasp" | "other";
 export type GripperKeyframe = {
@@ -64,6 +67,9 @@ export type FineAnnotation = {
   template_values?: Record<string, string>;
   skill?: string;
   operator_hand?: "左手" | "右手" | "双手" | "";
+  segment_validity?: SegmentValidity;
+  invalid_reason_code?: InvalidSegmentReasonCode;
+  invalid_reason_detail?: string;
   outcome: AnnotationOutcome;
   failure_reason_code?: FailureReasonCode;
   failure_direction?: string;
@@ -80,6 +86,7 @@ export type FineAnnotation = {
   hand_state?: "张开->闭合" | "闭合->张开" | "保持闭合" | "保持张开" | "";
   keyframe_point?: KeyframePoint;
   keyframe_points?: { left?: KeyframePoint; right?: KeyframePoint };
+  keyframe_frame?: number;
   gripper_keyframes?: Partial<Record<OperatorHand, GripperKeyframe>>;
   end_condition: string;
   actions: FineAction[];

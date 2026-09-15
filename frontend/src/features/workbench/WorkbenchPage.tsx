@@ -25,6 +25,13 @@ function assigneeLabel(person: WorkContext["annotator"]) {
   return `${person.display_name} @${person.username}`;
 }
 
+function isTextEditingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return !!target.closest(
+    "input, textarea, select, [contenteditable='true'], [contenteditable=''], [role='textbox'], [role='combobox'], [role='spinbutton'], [role='slider']",
+  );
+}
+
 function initialSegments(context: WorkContext): Segment[] {
   const segments = context.latest_revision?.payload.segments;
   return Array.isArray(segments) && segments.length > 0
@@ -79,6 +86,7 @@ export function WorkbenchPage() {
   const length = context?.length || 0;
   const videoSync = useVideoSync(length, fps);
   const selected = state.segments.find((segment) => segment.id === selectedId) || state.segments[0];
+  const selectedFine = selected ? currentFineAnnotation(selected) : undefined;
   const reviewing = context?.item.reviewer_id === user.id;
   const autosave = useAutosave({
     itemId,
@@ -265,7 +273,8 @@ export function WorkbenchPage() {
   );
   const canCreateRetry =
     !!selected &&
-    currentFineAnnotation(selected).outcome === "failure" &&
+    selectedFine?.segment_validity === "valid" &&
+    selectedFine.outcome === "failure" &&
     videoSync.currentFrame >= selected.start_frame &&
     videoSync.currentFrame < selected.end_frame - 1;
   const createRetry = useCallback(() => {
@@ -278,19 +287,31 @@ export function WorkbenchPage() {
     videoSync.playSegment(boundary, selected.end_frame);
   }, [canCreateRetry, markDirty, readOnly, selected, videoSync]);
 
+  const nudgeFrame = useCallback(
+    (delta: number) => videoSync.pauseAtFrame(videoSync.currentFrame + delta),
+    [videoSync],
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (gripperSession) return;
-      const target = event.target as HTMLElement | null;
-      if (event.code !== "Space" || target?.matches("input, textarea, [contenteditable='true']")) {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTextEditingTarget(event.target)) {
         return;
       }
-      event.preventDefault();
-      split();
+      if (event.code === "Space") {
+        event.preventDefault();
+        split();
+        return;
+      }
+      if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
+        event.preventDefault();
+        nudgeFrame(event.code === "ArrowLeft" ? -1 : 1);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [split, gripperSession]);
+  }, [split, gripperSession, nudgeFrame]);
 
   if (!context) return null;
   const submitDisabled =
@@ -353,10 +374,13 @@ export function WorkbenchPage() {
             onPause={videoSync.pauseAll}
             onFrameChange={videoSync.syncFrame}
             pointMarking={pointMarking}
-            keyframePoint={selected?.fine_annotation?.keyframe_point}
+            keyframePoint={
+              selectedFine?.segment_validity === "valid" && selectedFine.skill !== "Place"
+                ? selectedFine.keyframe_point
+                : undefined
+            }
             gripperPoints={
-              selected?.fine_annotation?.skill === "Pick" ||
-              selected?.fine_annotation?.skill === "Place"
+              selectedFine?.segment_validity === "valid" && selectedFine.skill === "Pick"
                 ? selected.fine_annotation
                 : undefined
             }
@@ -422,6 +446,7 @@ export function WorkbenchPage() {
           selected={selected}
           reviewing={reviewing}
           fps={fps}
+          currentFrame={videoSync.currentFrame}
           pointMarking={pointMarking}
           onBeginGripperMark={(hand, onConfirm) => {
             const frame = videoSync.currentFrame;

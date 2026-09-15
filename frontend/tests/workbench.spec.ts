@@ -209,6 +209,8 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await page.locator(".ant-select-dropdown:visible").getByTitle("左手", { exact: true }).click();
   await sentence.getByRole("textbox", { name: "物体名称", exact: true }).fill("黄瓜");
   await sentence.getByRole("textbox", { name: "夹爪初始位置", exact: true }).fill("货架前侧");
+  await sentence.getByRole("textbox", { name: "抬起动作（选填）", exact: true }).fill("向上抬起");
+  await expect(page.locator(".fine-preview")).toContainText("。【左手夹爪】【向上抬起】。");
   await expect(page.locator(".fine-preview").getByText("【左手】", { exact: true })).toBeVisible();
   await expect(
     page.locator(".fine-preview").getByText("【货架前侧】", { exact: true }),
@@ -233,6 +235,28 @@ test("annotator can edit, split, undo, redo, autosave, clear, and submit", async
   await page.getByRole("button", { name: "提交审核" }).click();
   await expect.poll(() => submitCalls).toBe(1);
   await expect(page).toHaveURL(/\/packages$/);
+});
+
+test("left and right arrow keys nudge frames without stealing text input cursor keys", async ({
+  page,
+}) => {
+  await mockShell(page, annotator);
+  await page.goto("/work/item-1");
+  const frameReadout = page.locator(".annotation-toolbar").getByText(/s \/ 10\.00s$/);
+
+  await expect(frameReadout).toHaveText("0.00s / 10.00s");
+  await page.locator(".workbench-main").click();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(frameReadout).toHaveText("0.10s / 10.00s");
+  await page.keyboard.press("ArrowLeft");
+  await expect(frameReadout).toHaveText("0.00s / 10.00s");
+
+  await page.getByRole("combobox", { name: "技能", exact: true }).click();
+  await page.getByTitle("拾取 (Pick)", { exact: true }).click();
+  await page.getByRole("textbox", { name: "物体名称", exact: true }).fill("杯子");
+  await page.keyboard.press("ArrowRight");
+  await expect(frameReadout).toHaveText("0.00s / 10.00s");
 });
 
 test("skill selection switches sentence fields without losing shared input", async ({
@@ -266,15 +290,20 @@ test("skill selection switches sentence fields without losing shared input", asy
     await expect(page.getByRole("textbox", { name: "物体名称", exact: true })).toHaveValue("黄瓜");
     await expect(page.getByRole("textbox", { name: "原支撑面", exact: true })).toHaveCount(0);
     if (skill === "Place") {
+      await expect(page.getByRole("textbox", { name: "目标位置", exact: true })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "释放方式", exact: true })).toBeVisible();
       await expect(
         page.getByRole("combobox", { name: "抬起夹爪（选填）", exact: true }),
       ).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "收尾动作和状态", exact: true })).toHaveCount(
+        0,
+      );
       await expect(
         page.getByRole("textbox", { name: "抬起动作（选填）", exact: true }),
       ).toBeVisible();
-      await expect(
-        page.getByRole("textbox", { name: "移动至（选填）", exact: true }),
-      ).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "移动至（选填）", exact: true })).toHaveCount(
+        0,
+      );
       await expect(
         page.getByRole("textbox", { name: "夹爪结束位置（选填）", exact: true }),
       ).toHaveCount(0);
@@ -309,6 +338,48 @@ test("skill selection switches sentence fields without losing shared input", asy
       .locator(".segment-editor")
       .evaluate((element) => element.scrollWidth <= element.clientWidth),
   ).toBe(true);
+});
+
+test("Place records only a keyframe frame without jaw landmark controls", async ({ page }) => {
+  await mockShell(page, annotator);
+  let payload: AnnotationPayload = contextFor(annotatorItem, annotator.id).latest_revision.payload;
+  await page.route("**/api/v1/work-items/item-1/draft", async (route) => {
+    payload = (route.request().postDataJSON() as { payload: AnnotationPayload }).payload;
+    await route.fulfill({ json: annotatorItem });
+  });
+
+  await page.goto("/work/item-1");
+  const selector = page.locator(".sentence-skill .ant-select-selector");
+  await selector.click();
+  await page.getByTitle("放置 (Place)", { exact: true }).click();
+  await expect(page.getByText("夹爪完全打开的时刻", { exact: true })).toBeVisible();
+  await expect(page.getByText("只标关键帧，不标夹爪位置", { exact: true })).toBeVisible();
+
+  await page.getByRole("combobox", { name: "操作手", exact: true }).click();
+  await page.locator(".ant-select-dropdown:visible").getByTitle("双手", { exact: true }).click();
+  await page.getByRole("combobox", { name: "释放方式", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByTitle("空中释放后落至目标位置", { exact: true })
+    .click();
+  await expect(page.getByRole("button", { name: "标记左手", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "标记右手", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "记录当前帧", exact: true }).click();
+  await expect(page.getByText("帧 0", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect.poll(() => payload.segments?.[0].fine_annotation?.keyframe_frame).toBe(0);
+  expect(payload.segments?.[0].fine_annotation?.template_values?.release_mode).toBe(
+    "空中释放后落至目标位置",
+  );
+  expect(payload.segments?.[0].fine_annotation?.gripper_keyframes).toBeUndefined();
+  expect(payload.segments?.[0].fine_annotation?.keyframe_point).toBeUndefined();
+
+  await selector.click();
+  await page.getByTitle("拾取 (Pick)", { exact: true }).click();
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect.poll(() => payload.segments?.[0].fine_annotation?.skill).toBe("Pick");
+  expect(payload.segments?.[0].fine_annotation?.keyframe_frame).toBeUndefined();
 });
 
 test("reviewer can approve an assigned task", async ({ page }) => {
@@ -418,7 +489,8 @@ test("Pick failure stores a structured reason and creates a clean retry segment"
     await route.fulfill({ json: annotatorItem });
   });
   await page.goto("/work/item-1");
-  await page.getByRole("combobox", { name: "技能", exact: true }).click();
+  const selector = page.locator(".sentence-skill .ant-select-selector");
+  await selector.click();
   await page.getByTitle("拾取 (Pick)", { exact: true }).click();
   await page.locator(".attempt-outcome").getByText("失败", { exact: true }).click();
   await page.getByRole("combobox", { name: "失败原因", exact: true }).click();
@@ -429,7 +501,8 @@ test("Pick failure stores a structured reason and creates a clean retry segment"
   await page.getByRole("textbox", { name: "偏移方向", exact: true }).fill("左上方");
   await expect(page.getByRole("region", { name: "失败事件面板" })).toBeVisible();
   await expect(page.getByRole("region", { name: "标注句编辑器" })).toHaveCount(0);
-  await expect(page.locator("strong").filter({ hasText: "失败关键帧（选填）" })).toBeVisible();
+  await expect(page.getByText("失败关键帧", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "标记左手", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "确认标注结果" })).toBeEnabled();
   await expect(
     page.locator(".fine-preview").getByText("【左上方】", { exact: true }),
@@ -450,6 +523,8 @@ test("Pick failure stores a structured reason and creates a clean retry segment"
   expect(payload?.segments?.[0].fine_annotation?.outcome).toBe("failure");
   expect(payload?.segments?.[0].fine_annotation?.failure_reason_code).toBe("gripper_deviated");
   expect(payload?.segments?.[0].fine_annotation?.failure_direction).toBe("左上方");
+  expect(payload?.segments?.[0].fine_annotation?.keyframe_frame).toBeUndefined();
+  expect(payload?.segments?.[0].fine_annotation?.gripper_keyframes).toBeUndefined();
   expect(payload?.segments?.[0].end_frame).toBe(1);
   expect(payload?.segments?.[1].retry_of).toBe(payload?.segments?.[0].id);
   expect(payload?.segments?.[1].fine_annotation?.outcome).toBe("success");

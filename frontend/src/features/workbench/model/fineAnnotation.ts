@@ -1,22 +1,35 @@
-import type { FineAnnotation } from "../../../shared/api/types";
+import type { FineAnnotation, SegmentValidity } from "../../../shared/api/types";
 import {
   getSkillDefinition,
   sentenceFieldValue,
   sentenceTokens,
   sentenceTokensForOutput,
+  withSkillTemplateDefaults,
 } from "../skillDefinitions";
 import { isSkillEnabled } from "../skillAvailability";
 import type { Segment } from "../../../shared/api/types";
 import { gripperIssues } from "./gripperKeyframes";
 import { failureReasonLabel } from "../failureReasons";
+import { invalidSegmentReasonLabel } from "../segmentValidity";
 
 export type FineAnnotationPreviewPart = {
   text: string;
   kind: "plain" | "filled" | "missing";
 };
 
+export function placeKeyframeFrame(fine: FineAnnotation): number | undefined {
+  if (fine.keyframe_frame !== undefined) return fine.keyframe_frame;
+  return Object.values(fine.gripper_keyframes || {}).find((group) => Number.isInteger(group?.frame))
+    ?.frame;
+}
+
+function effectiveSegmentValidity(fine: FineAnnotation): SegmentValidity {
+  return fine.segment_validity ?? (fine.outcome === "pending" ? "pending" : "valid");
+}
+
 export function currentFineAnnotation(segment: Segment): FineAnnotation {
   const fine = segment.fine_annotation;
+  const skill = fine?.skill || segment.skill || "";
   return {
     object_name: "",
     object_color: "",
@@ -31,18 +44,35 @@ export function currentFineAnnotation(segment: Segment): FineAnnotation {
     recovery: "",
     notes: "",
     ...fine,
-    skill: fine?.skill || segment.skill || "",
+    skill,
+    segment_validity:
+      fine?.segment_validity ??
+      (fine?.outcome === "pending"
+        ? "pending"
+        : fine
+          ? "valid"
+          : segment.source === "user"
+            ? "pending"
+            : "valid"),
     template_version: 1,
-    template_values: fine?.template_values || {},
+    template_values: withSkillTemplateDefaults(skill, fine?.template_values || {}),
   };
 }
 
 export function templateIssues(segment: Segment): string[] {
   const fine = currentFineAnnotation(segment);
+  const validity = effectiveSegmentValidity(fine);
+  if (validity === "pending") return ["片段有效性"];
+  if (validity === "invalid") {
+    const missing = fine.invalid_reason_code ? [] : ["无效原因"];
+    if (fine.invalid_reason_code === "other" && !fine.invalid_reason_detail?.trim())
+      missing.push("无效原因说明");
+    return missing;
+  }
   const skill = fine.skill;
   if (skill && !isSkillEnabled(skill)) return ["Skill 暂未开放"];
   if (!skill) return ["技能"];
-  const values = fine.template_values || {};
+  const values = withSkillTemplateDefaults(skill, fine.template_values || {});
   const missing = [
     ...(fine.outcome === "pending" ? ["结果"] : []),
     ...(fine.outcome === "failure"
@@ -83,20 +113,30 @@ export function templateIssues(segment: Segment): string[] {
     );
   if (fine.outcome === "failure") {
     // Failure events can be submitted without an exact hand or jaw location.
-  } else if (skill === "Pick" || skill === "Place") {
+  } else if (skill === "Pick") {
     missing.push(...gripperIssues(fine, segment.start_frame, segment.end_frame));
+  } else if (skill === "Place") {
+    const frame = placeKeyframeFrame(fine);
+    if (
+      typeof frame !== "number" ||
+      !Number.isInteger(frame) ||
+      frame < segment.start_frame ||
+      frame >= segment.end_frame
+    )
+      missing.push("片段内关键帧帧号");
   } else if (!validPoint(fine.keyframe_point)) missing.push("片段内关键帧位置");
   return missing;
 }
 
 function tokenText(skill: string, values: Record<string, string>): string {
-  return sentenceTokensForOutput(skill, values)
+  const effectiveValues = withSkillTemplateDefaults(skill, values);
+  return sentenceTokensForOutput(skill, effectiveValues)
     .map((token) =>
       typeof token === "string"
         ? token
-        : sentenceFieldValue(token, values) &&
-            (!token.options || token.options.includes(sentenceFieldValue(token, values)!))
-          ? sentenceFieldValue(token, values)!
+        : sentenceFieldValue(token, effectiveValues) &&
+            (!token.options || token.options.includes(sentenceFieldValue(token, effectiveValues)!))
+          ? sentenceFieldValue(token, effectiveValues)!
           : token.optional
             ? ""
             : "【" + token.label + "】",
@@ -108,14 +148,17 @@ function tokenPreviewParts(
   skill: string,
   values: Record<string, string>,
 ): FineAnnotationPreviewPart[] {
-  return sentenceTokensForOutput(skill, values).flatMap((token): FineAnnotationPreviewPart[] => {
-    if (typeof token === "string") return [{ text: token, kind: "plain" }];
-    const value = sentenceFieldValue(token, values);
-    if (value && (!token.options || token.options.includes(value))) {
-      return [{ text: `【${value}】`, kind: "filled" }];
-    }
-    return token.optional ? [] : [{ text: `【${token.label}】`, kind: "missing" }];
-  });
+  const effectiveValues = withSkillTemplateDefaults(skill, values);
+  return sentenceTokensForOutput(skill, effectiveValues).flatMap(
+    (token): FineAnnotationPreviewPart[] => {
+      if (typeof token === "string") return [{ text: token, kind: "plain" }];
+      const value = sentenceFieldValue(token, effectiveValues);
+      if (value && (!token.options || token.options.includes(value))) {
+        return [{ text: `【${value}】`, kind: "filled" }];
+      }
+      return token.optional ? [] : [{ text: `【${token.label}】`, kind: "missing" }];
+    },
+  );
 }
 
 function retryText(fine: FineAnnotation): string {
@@ -204,7 +247,38 @@ function failurePreviewParts(fine: FineAnnotation): FineAnnotationPreviewPart[] 
   return parts;
 }
 
+function invalidPreviewParts(fine: FineAnnotation): FineAnnotationPreviewPart[] {
+  const code = fine.invalid_reason_code;
+  const detail = fine.invalid_reason_detail?.trim();
+  const reason = code ? invalidSegmentReasonLabel(code, detail) : "无效原因";
+  const missingOtherDetail = code === "other" && !detail;
+  const missingReasonText = missingOtherDetail ? "无效原因说明" : reason;
+  return [
+    { text: "本片段无效，原因是", kind: "plain" },
+    {
+      text: code && !missingOtherDetail ? `【${reason}】` : `【${missingReasonText}】`,
+      kind: code && !missingOtherDetail ? "filled" : "missing",
+    },
+    ...(detail && code !== "other"
+      ? [
+          { text: "（", kind: "plain" as const },
+          { text: `【${detail}】`, kind: "filled" as const },
+          { text: "）", kind: "plain" as const },
+        ]
+      : []),
+    { text: "。", kind: "plain" },
+  ];
+}
+
 export function fineAnnotationPreview(fine: FineAnnotation): FineAnnotationPreviewPart[] {
+  const validity = effectiveSegmentValidity(fine);
+  if (validity === "invalid") {
+    return [
+      ...invalidPreviewParts(fine),
+      ...(fine.notes ? [{ text: ` ${fine.notes}`, kind: "plain" as const }] : []),
+    ];
+  }
+  if (validity === "pending") return [{ text: "【请选择片段有效性】", kind: "missing" }];
   if (!getSkillDefinition(fine.skill || "")) {
     return [{ text: "【请选择技能】", kind: "missing" }];
   }
@@ -223,6 +297,18 @@ export function fineAnnotationPreview(fine: FineAnnotation): FineAnnotationPrevi
 }
 
 export function fineAnnotationText(fine: FineAnnotation): string {
+  const validity = effectiveSegmentValidity(fine);
+  if (validity === "invalid") {
+    const reason = invalidSegmentReasonLabel(fine.invalid_reason_code, fine.invalid_reason_detail);
+    const detail =
+      fine.invalid_reason_code && fine.invalid_reason_code !== "other"
+        ? fine.invalid_reason_detail?.trim()
+        : "";
+    return [`本片段无效，原因是${reason}${detail ? `（${detail}）` : ""}。`, fine.notes]
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (validity === "pending") return "【请选择片段有效性】";
   const values = fine.template_values || {};
   if (!getSkillDefinition(fine.skill || "")) return "【请选择技能】";
   const outcome = fine.outcome || "pending";
