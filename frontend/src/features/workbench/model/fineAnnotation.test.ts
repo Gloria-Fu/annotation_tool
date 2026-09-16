@@ -330,8 +330,23 @@ it("only exposes the five supported skills with distinct outcomes", () => {
 
 it("defines the Place keyframe as the moment the gripper fully opens", () => {
   const place = SKILL_DEFINITIONS.find((skill) => skill.name === "Place");
-  expect(place?.keyframeDefinition).toBe("夹爪完全打开的时刻");
-  expect(place?.requiredObjects).toEqual(["只标关键帧，不标夹爪位置"]);
+  expect(place?.keyframeDefinition).toBe(
+    "夹爪完全张开的时刻；若边张开边移动，取移动前张开最大的帧。",
+  );
+  expect(place?.requiredObjects).toEqual(["只标关键帧；双手时分别标左右手，不标夹爪位置"]);
+});
+
+it("requires Pick and Place tail action from two explicit options", () => {
+  for (const skill of ["Pick", "Place"]) {
+    const tailAction = sentenceTokens(skill, {}).find(
+      (token) => typeof token !== "string" && token.key === "lift_action",
+    );
+    expect(tailAction).toMatchObject({
+      label: "收尾动作和状态",
+      options: ["向上抬起", "无动作"],
+      optional: undefined,
+    });
+  }
 });
 
 it("validates Place with only a keyframe frame and ignores jaw positions", () => {
@@ -345,6 +360,7 @@ it("validates Place with only a keyframe frame and ignores jaw positions", () =>
     release_mode: "接触支撑面后释放",
     gripper_action: "张开",
     position_end: "托盘中央",
+    lift_action: "无动作",
   };
   const fine: FineAnnotation = {
     ...annotation,
@@ -425,7 +441,7 @@ it("ends Pick at holding and ignores obsolete movement fields", () => {
       position_end: "旧终点",
     },
   });
-  expect(text).toMatch(/夹持住【夹持物体】的【接触部位】。$/);
+  expect(text).toMatch(/夹持住【夹持物体】的【接触部位】。【收尾动作和状态】。$/);
   expect(text).not.toContain("旧");
 });
 
@@ -575,7 +591,59 @@ it("supports separate left and right objects in two-hand Place", () => {
   ).toContain("右手对象名称");
 });
 
-it("omits the optional Pick lift clause until one field is filled", () => {
+it("requires separate left and right keyframe frames for two-hand Place", () => {
+  const values = {
+    operator_hand: "双手",
+    object_mode: "separate_objects",
+    initial_position: "托盘前方",
+    initial_state_left: "闭合",
+    initial_state_right: "闭合",
+    left_object_name: "杯子",
+    left_approach: "左侧垫片上方",
+    left_orientation: "垂直",
+    left_release_mode: "接触支撑面后释放",
+    left_position_end: "左侧垫片中央",
+    left_gripper_action: "张开",
+    right_object_name: "勺子",
+    right_approach: "右侧垫片上方",
+    right_orientation: "平行",
+    right_release_mode: "空中释放后落至目标位置",
+    right_position_end: "右侧垫片中央",
+    right_gripper_action: "张开",
+  };
+  const issues = (fine: Partial<FineAnnotation>) =>
+    templateIssues({
+      id: "two-hand-place-keyframes",
+      start_frame: 0,
+      end_frame: 10,
+      text: "",
+      fine_annotation: {
+        ...annotation,
+        skill: "Place",
+        template_values: values,
+        ...fine,
+      },
+    });
+
+  expect(issues({ keyframe_frame: 5 })).toEqual(["左手片段内关键帧帧号", "右手片段内关键帧帧号"]);
+  expect(
+    issues({
+      gripper_keyframes: {
+        left: { frame: 5, view: "head" },
+      },
+    }),
+  ).toContain("右手片段内关键帧帧号");
+  expect(
+    issues({
+      gripper_keyframes: {
+        left: { frame: 5, view: "head" },
+        right: { frame: 6, view: "head" },
+      },
+    }),
+  ).toEqual([]);
+});
+
+it("requires Pick tail action and omits the tail sentence when no action is selected", () => {
   const values = {
     object_name: "茶叶罐",
     orientation: "垂直",
@@ -584,6 +652,7 @@ it("omits the optional Pick lift clause until one field is filled", () => {
   };
   const baseText = fineAnnotationText({ ...annotation, template_values: values });
   expect(baseText).toContain("夹持住茶叶罐的两侧。");
+  expect(baseText).toContain("【收尾动作和状态】");
   expect(baseText).not.toContain("移动至");
   expect(
     templateIssues({
@@ -593,7 +662,26 @@ it("omits the optional Pick lift clause until one field is filled", () => {
       text: baseText,
       fine_annotation: { ...annotation, template_values: values },
     }),
-  ).not.toContain("抬起动作");
+  ).toContain("收尾动作和状态");
+
+  expect(
+    fineAnnotationText({ ...annotation, template_values: { ...values, lift_action: "无动作" } }),
+  ).toContain("夹持住茶叶罐的两侧。");
+  expect(
+    fineAnnotationText({ ...annotation, template_values: { ...values, lift_action: "无动作" } }),
+  ).not.toContain("无动作");
+  expect(
+    templateIssues({
+      id: "pick",
+      start_frame: 0,
+      end_frame: 10,
+      text: baseText,
+      fine_annotation: {
+        ...annotation,
+        template_values: { ...values, lift_action: "无动作" },
+      },
+    }),
+  ).not.toContain("收尾动作和状态");
 
   expect(
     fineAnnotationText({ ...annotation, template_values: { ...values, lift_action: "向上抬起" } }),
@@ -616,7 +704,7 @@ it("omits the optional Pick lift clause until one field is filled", () => {
   );
 });
 
-it("omits the optional Place lift clause until one field is filled", () => {
+it("requires Place tail action and omits the tail sentence when no action is selected", () => {
   const values = {
     operator_hand: "右手",
     initial_position: "托盘前侧",
@@ -637,6 +725,7 @@ it("omits the optional Place lift clause until one field is filled", () => {
   expect(baseText).toContain(
     "将物体移动至托盘上方，释放方式为接触支撑面后释放，张开夹爪，物体最终位于托盘中央。",
   );
+  expect(baseText).toContain("【收尾动作和状态】");
   expect(
     templateIssues({
       id: "place",
@@ -645,20 +734,20 @@ it("omits the optional Place lift clause until one field is filled", () => {
       text: baseText,
       fine_annotation: fine,
     }),
-  ).not.toContain("抬起夹爪");
+  ).toContain("收尾动作和状态");
 
   expect(
     fineAnnotationText({
       ...fine,
-      template_values: { ...values, lift_destination: "托盘右上方" },
+      template_values: { ...values, lift_action: "无动作" },
     }),
   ).toContain("将物体移动至托盘上方，释放方式为接触支撑面后释放，张开夹爪，物体最终位于托盘中央。");
   expect(
     fineAnnotationText({
       ...fine,
-      template_values: { ...values, lift_destination: "托盘右上方" },
+      template_values: { ...values, lift_action: "无动作" },
     }),
-  ).not.toContain("托盘右上方");
+  ).not.toContain("无动作");
 
   expect(
     fineAnnotationText({

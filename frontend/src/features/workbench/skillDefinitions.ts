@@ -38,6 +38,7 @@ const field = (
 const states = ["张开", "闭合", "无法判断"];
 const actions = ["张开", "闭合", "保持张开", "保持闭合", "无法判断"];
 const liftGripperOptions = ["左手夹爪", "右手夹爪", "双手夹爪"];
+const liftActionOptions = ["向上抬起", "无动作"];
 const placeReleaseModes = ["接触支撑面后释放", "空中释放后落至目标位置", "无法判断释放方式"];
 const skillTemplateDefaults: Partial<Record<SkillName, Record<string, string>>> = {
   Pick: {
@@ -88,7 +89,7 @@ function tokens(name: SkillName): SentenceToken[] {
   const start: SentenceToken[] = [
     field("operator_hand", "操作手", "选择操作手", ["左手", "右手", "双手"]),
     "夹爪初始位于",
-    field("initial_position", "夹爪初始位置", "如：货架前侧"),
+    field("initial_position", "夹爪初始位置", "如：餐桌右侧边缘外侧"),
     "，状态为",
     field("initial_state", "初始夹爪状态", "选择状态", states),
   ];
@@ -100,7 +101,7 @@ function tokens(name: SkillName): SentenceToken[] {
       "，夹爪以",
       field("orientation", "相对姿态", "选择姿态", ["垂直", "平行", "倾斜", "无法判断"]),
       "的姿态，将物体移动至",
-      field("approach", "目标位置", "如：托盘上方"),
+      field("approach", "目标位置", "如：托盘内靠近左后角的位置"),
       "，释放方式为",
       field("release_mode", "释放方式", "选择释放方式", placeReleaseModes),
       "，",
@@ -109,11 +110,11 @@ function tokens(name: SkillName): SentenceToken[] {
       field("position_end", "放置位置", "如：托盘中央"),
       "。",
       field("lift_gripper", "抬起夹爪（选填）", "选择夹爪", liftGripperOptions, true),
-      field("lift_action", "抬起动作（选填）", "如：向上抬起", undefined, true),
+      field("lift_action", "收尾动作和状态", "选择收尾动作", liftActionOptions),
       "。",
     ];
   const objectTarget: SentenceToken[] = [
-    field("object_location", "物体所在位置", "如：货架右侧"),
+    field("object_location", "物体所在位置", "如：白色桌面右上角"),
     "的",
     ...object,
   ];
@@ -140,13 +141,13 @@ function tokens(name: SkillName): SentenceToken[] {
       field("contact_point", "接触部位", "如：两侧"),
       "。",
       field("lift_gripper", "抬起夹爪（选填）", "选择夹爪", liftGripperOptions, true),
-      field("lift_action", "抬起动作（选填）", "如：向上抬起", undefined, true),
+      field("lift_action", "收尾动作和状态", "选择收尾动作", liftActionOptions),
       "。",
     ];
   const base: SentenceToken[] = [
     ...start,
     "，向",
-    field("approach", "靠近目标位置", "如：货架右上方"),
+    field("approach", "靠近目标位置", "如：白色桌面右上角铅笔盒前方"),
     "移动。靠近位于",
     ...objectTarget,
     ...posture,
@@ -174,7 +175,7 @@ function separateObjectStart(): SentenceToken[] {
   return [
     field("operator_hand", "操作手", "选择操作手", ["左手", "右手", "双手"]),
     "夹爪初始位于",
-    field("initial_position", "夹爪初始位置", "如：货架前侧"),
+    field("initial_position", "夹爪初始位置", "如：餐桌右侧边缘外侧"),
     "，左手状态为",
     field("initial_state_left", "左手初始夹爪状态", "选择状态", states),
     "、右手状态为",
@@ -189,7 +190,7 @@ function separatePickHandTokens(
     "。",
     label,
     "靠近位于",
-    field(prefix + "object_location", label + "对象所在位置", "如：货架右侧"),
+    field(prefix + "object_location", label + "对象所在位置", "如：白色桌面右上角"),
     "的",
     ...handObject(prefix, label),
     "，夹爪以相对",
@@ -239,7 +240,7 @@ function separatePlaceHandTokens(
       "无法判断",
     ]),
     "的姿态，将物体移动至",
-    field(prefix + "approach", label + "目标位置", "如：托盘上方"),
+    field(prefix + "approach", label + "目标位置", "如：托盘内靠近左后角的位置"),
     "，释放方式为",
     field(prefix + "release_mode", label + "释放方式", "选择释放方式", placeReleaseModes),
     "，",
@@ -280,8 +281,8 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   {
     name: "Place",
     label: "放置",
-    keyframeDefinition: "夹爪完全打开的时刻",
-    requiredObjects: ["只标关键帧，不标夹爪位置"],
+    keyframeDefinition: "夹爪完全张开的时刻；若边张开边移动，取移动前张开最大的帧。",
+    requiredObjects: ["只标关键帧；双手时分别标左右手，不标夹爪位置"],
     tokens: tokens("Place"),
   },
   {
@@ -351,14 +352,16 @@ export function sentenceTokensForOutput(
   values: Record<string, string>,
 ): SentenceToken[] {
   const tokens = sentenceTokens(skill, values);
-  const hasLiftAction = !!values.lift_action?.trim();
+  const hasLiftAction = values.lift_action === "向上抬起";
+  const noLiftAction = values.lift_action === "无动作";
   if (skill === "Pick") {
     const liftIndex = tokens.findIndex(
       (token) => typeof token !== "string" && token.key === "lift_gripper",
     );
     if (liftIndex < 0) return tokens;
     const base = tokens.slice(0, liftIndex - 1);
-    if (!hasLiftAction) return [...base, "。"];
+    if (noLiftAction) return [...base, "。"];
+    if (!hasLiftAction) return tokens;
     const liftGripper = tokens[liftIndex];
     const liftAction = tokens[liftIndex + 1];
     const tail: SentenceToken[] = ["。"];
@@ -373,7 +376,8 @@ export function sentenceTokensForOutput(
     );
     if (liftIndex < 0) return tokens;
     const base = tokens.slice(0, liftIndex - 1);
-    if (!hasLiftAction) return [...base, "。"];
+    if (noLiftAction) return [...base, "。"];
+    if (!hasLiftAction) return tokens;
     const liftGripper = tokens[liftIndex];
     const liftAction = tokens[liftIndex + 1];
     const tail: SentenceToken[] = ["。"];

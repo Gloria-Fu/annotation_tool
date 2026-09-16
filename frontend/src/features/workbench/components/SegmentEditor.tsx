@@ -177,8 +177,24 @@ export function SegmentEditor({
   const requiredObjectsText = definition?.requiredObjects.join("、");
   const beginPointMark = () => onBeginPointMark((keyframe_point) => update({ keyframe_point }));
   const recordedPlaceKeyframeFrame = placeKeyframeFrame(fine);
-  const recordPlaceKeyframe = () => {
+  const recordPlaceKeyframe = (hand?: OperatorHand) => {
     if (currentFrame < selected.start_frame || currentFrame >= selected.end_frame) return;
+    if (hand) {
+      update({
+        keyframe_frame: undefined,
+        keyframe_point: undefined,
+        keyframe_points: undefined,
+        gripper_keyframes: {
+          ...fine.gripper_keyframes,
+          [hand]: {
+            ...fine.gripper_keyframes?.[hand],
+            frame: currentFrame,
+            view: "head",
+          },
+        },
+      });
+      return;
+    }
     update({
       keyframe_frame: currentFrame,
       keyframe_point: undefined,
@@ -589,39 +605,81 @@ export function SegmentEditor({
         ) : segmentValidity === "valid" &&
           fine.outcome !== "failure" &&
           definition?.name === "Place" ? (
-          <div className="keyframe-point-control">
+          annotationHands(fine).length > 1 ? (
             <div>
               <Typography.Text strong>关键帧帧号</Typography.Text>
               <Typography.Text type="secondary">
-                {recordedPlaceKeyframeFrame !== undefined
-                  ? `帧 ${recordedPlaceKeyframeFrame}`
-                  : "尚未记录，请将播放头定位到夹爪完全打开的时刻"}
+                双手分别记录夹爪完全打开的时刻，不标记左夹和右夹位置
               </Typography.Text>
-              <Typography.Text type="secondary">只记录帧号，不标记左夹和右夹位置</Typography.Text>
+              {annotationHands(fine).map((hand) => {
+                const frame = placeKeyframeFrame(fine, hand);
+                const label = handLabel(hand);
+                return (
+                  <div className="keyframe-point-control" key={hand}>
+                    <div>
+                      <Typography.Text strong>{label}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {frame !== undefined
+                          ? `帧 ${frame}`
+                          : "尚未记录，请将播放头定位到该手夹爪完全打开的时刻"}
+                      </Typography.Text>
+                    </div>
+                    <Button
+                      icon={frame !== undefined ? <RotateCcw size={15} /> : <Flag size={15} />}
+                      disabled={
+                        !enabled ||
+                        currentFrame < selected.start_frame ||
+                        currentFrame >= selected.end_frame
+                      }
+                      onClick={() => recordPlaceKeyframe(hand)}
+                    >
+                      {frame !== undefined ? "重新记录当前帧" : "记录当前帧"}
+                      {label}
+                    </Button>
+                    {frame !== undefined && (
+                      <Button size="small" onClick={() => onJumpFrame(frame)}>
+                        跳转到此帧
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <Button
-              icon={
-                recordedPlaceKeyframeFrame !== undefined ? (
-                  <RotateCcw size={15} />
-                ) : (
-                  <Flag size={15} />
-                )
-              }
-              disabled={
-                !enabled ||
-                currentFrame < selected.start_frame ||
-                currentFrame >= selected.end_frame
-              }
-              onClick={recordPlaceKeyframe}
-            >
-              {recordedPlaceKeyframeFrame !== undefined ? "重新记录当前帧" : "记录当前帧"}
-            </Button>
-            {recordedPlaceKeyframeFrame !== undefined && (
-              <Button size="small" onClick={() => onJumpFrame(recordedPlaceKeyframeFrame)}>
-                跳转到此帧
+          ) : (
+            <div className="keyframe-point-control">
+              <div>
+                <Typography.Text strong>关键帧帧号</Typography.Text>
+                <Typography.Text type="secondary">
+                  {recordedPlaceKeyframeFrame !== undefined
+                    ? `帧 ${recordedPlaceKeyframeFrame}`
+                    : "尚未记录，请将播放头定位到夹爪完全打开的时刻"}
+                </Typography.Text>
+                <Typography.Text type="secondary">只记录帧号，不标记左夹和右夹位置</Typography.Text>
+              </div>
+              <Button
+                icon={
+                  recordedPlaceKeyframeFrame !== undefined ? (
+                    <RotateCcw size={15} />
+                  ) : (
+                    <Flag size={15} />
+                  )
+                }
+                disabled={
+                  !enabled ||
+                  currentFrame < selected.start_frame ||
+                  currentFrame >= selected.end_frame
+                }
+                onClick={() => recordPlaceKeyframe()}
+              >
+                {recordedPlaceKeyframeFrame !== undefined ? "重新记录当前帧" : "记录当前帧"}
               </Button>
-            )}
-          </div>
+              {recordedPlaceKeyframeFrame !== undefined && (
+                <Button size="small" onClick={() => onJumpFrame(recordedPlaceKeyframeFrame)}>
+                  跳转到此帧
+                </Button>
+              )}
+            </div>
+          )
         ) : segmentValidity === "valid" && fine.outcome !== "failure" && definition ? (
           <div className="keyframe-point-control">
             <div>
