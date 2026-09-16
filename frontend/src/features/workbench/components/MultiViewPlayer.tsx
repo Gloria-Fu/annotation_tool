@@ -159,11 +159,15 @@ export function MultiViewPlayer({
               if (!group || group.view !== key || group.frame !== currentFrame) return [];
               return (["left", "right"] as const).map((side) => {
                 const point = group[side];
-                return point?.visibility === "visible" ? (
+                return point && Number.isFinite(point.x) && Number.isFinite(point.y) ? (
                   <KeyframeMarker
                     key={hand + side}
                     point={{ frame: group.frame, view: group.view, x: point.x, y: point.y }}
-                    label={handLabel(hand) + (side === "left" ? "左夹" : "右夹")}
+                    label={
+                      handLabel(hand) +
+                      (side === "left" ? "左夹" : "右夹") +
+                      (point.visibility === "invisible" ? "（估计）" : "")
+                    }
                   />
                 ) : null;
               });

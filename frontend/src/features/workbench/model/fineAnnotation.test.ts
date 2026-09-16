@@ -343,9 +343,57 @@ it("requires Pick and Place tail action from two explicit options", () => {
     );
     expect(tailAction).toMatchObject({
       label: "收尾动作和状态",
-      options: ["向上抬起", "无动作"],
+      options: ["向上抬起", "无动作", "其他"],
       optional: undefined,
     });
+  }
+});
+
+it("shows and uses a free-text tail action when Pick or Place selects other", () => {
+  for (const skill of ["Pick", "Place"]) {
+    const tokens = sentenceTokens(skill, { lift_action: "其他" });
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "lift_action_other",
+          label: "其他收尾动作和状态",
+        }),
+      ]),
+    );
+    const missingText = fineAnnotationText({
+      ...annotation,
+      skill,
+      template_values: {
+        lift_action: "其他",
+      },
+    });
+    expect(missingText).toContain("【其他收尾动作和状态】");
+    expect(
+      templateIssues({
+        id: "custom-tail",
+        start_frame: 0,
+        end_frame: 10,
+        text: "",
+        fine_annotation: {
+          ...annotation,
+          skill,
+          template_values: {
+            lift_action: "其他",
+          },
+        },
+      }),
+    ).toContain("其他收尾动作和状态");
+
+    const customText = fineAnnotationText({
+      ...annotation,
+      skill,
+      template_values: {
+        lift_action: "其他",
+        lift_action_other: "向前移开夹爪",
+      },
+    });
+    expect(customText).toContain("向前移开夹爪。");
+    expect(customText).not.toContain("其他向前移开夹爪");
   }
 });
 

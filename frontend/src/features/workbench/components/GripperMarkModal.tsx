@@ -1,11 +1,24 @@
 import { useCallback, useRef, useState } from "react";
-import { Button, Checkbox, Modal, Segmented, Tooltip } from "antd";
+import { Button, Modal, Radio, Segmented, Tooltip } from "antd";
 import { Crosshair, Hand, Maximize, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import type { GripperKeyframe, JawMark, OperatorHand } from "../../../shared/api/types";
 import { completeGripper, handLabel } from "../model/gripperKeyframes";
 
 type Side = "left" | "right";
+
+function hasCoordinates(point?: JawMark): point is JawMark {
+  return (
+    !!point &&
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    point.x >= 0 &&
+    point.x <= 1 &&
+    point.y >= 0 &&
+    point.y <= 1
+  );
+}
+
 export type GripperMarkSession = {
   image: string;
   width: number;
@@ -60,8 +73,14 @@ export function GripperMarkModal({
     const x = (clientX - box.left) / box.width;
     const y = (clientY - box.top) / box.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
-    const point: JawMark = { visibility: "visible", x, y };
-    setPoints((previous) => ({ ...previous, [target]: point }));
+    setPoints((previous) => ({
+      ...previous,
+      [target]: {
+        visibility: previous[target]?.visibility || "visible",
+        x,
+        y,
+      },
+    }));
   };
   const complete = completeGripper(points);
   return (
@@ -178,11 +197,11 @@ export function GripperMarkModal({
                   {(["left", "right"] as const).map((target) => {
                     const point = points[target];
                     return (
-                      point?.visibility === "visible" && (
+                      hasCoordinates(point) && (
                         <button
                           key={target}
                           type="button"
-                          className="gripper-landmark"
+                          className={`gripper-landmark${point.visibility === "invisible" ? " estimated" : ""}`}
                           aria-label={target === "left" ? "左夹标记点" : "右夹标记点"}
                           style={{
                             left: `${point.x * 100}%`,
@@ -207,7 +226,10 @@ export function GripperMarkModal({
                             dragging.current = null;
                           }}
                         >
-                          <span>{target === "left" ? "左夹" : "右夹"}</span>
+                          <span>
+                            {target === "left" ? "左夹" : "右夹"}
+                            {point.visibility === "invisible" ? "（估计）" : ""}
+                          </span>
                         </button>
                       )
                     );
@@ -219,32 +241,39 @@ export function GripperMarkModal({
         )}
       </TransformWrapper>
       <div className="gripper-mark-status">
-        {(["left", "right"] as const).map((target) => (
-          <div key={target} className="gripper-jaw-status">
-            <span>
-              {target === "left" ? "左夹" : "右夹"}：
-              {points[target]?.visibility === "visible"
-                ? `(${points[target].x.toFixed(4)}, ${points[target].y.toFixed(4)})`
-                : points[target]?.visibility === "invisible"
-                  ? "不可见"
-                  : "未标记"}
-            </span>
-            <Checkbox
-              checked={points[target]?.visibility === "invisible"}
-              aria-label={(target === "left" ? "左夹" : "右夹") + "不可见"}
-              onChange={(event) => {
-                const checked = event.target.checked;
-                setPoints((previous) => ({
-                  ...previous,
-                  [target]: checked ? { visibility: "invisible" } : undefined,
-                }));
-                if (checked && target === "left" && !points.right) setSide("right");
-              }}
-            >
-              不可见
-            </Checkbox>
-          </div>
-        ))}
+        {(["left", "right"] as const).map((target) => {
+          const point = points[target];
+          const hasPoint = hasCoordinates(point);
+          return (
+            <div key={target} className="gripper-jaw-status">
+              <span>
+                {target === "left" ? "左夹" : "右夹"}：
+                {hasPoint
+                  ? `(${point.x.toFixed(4)}, ${point.y.toFixed(4)}) · ${
+                      point.visibility === "invisible" ? "不可见" : "可见"
+                    }`
+                  : "未标点"}
+              </span>
+              <Radio.Group
+                aria-label={(target === "left" ? "左夹" : "右夹") + "可见性"}
+                disabled={!hasPoint}
+                value={hasPoint ? point.visibility : undefined}
+                options={[
+                  { label: "可见", value: "visible" },
+                  { label: "不可见", value: "invisible" },
+                ]}
+                onChange={(event) => {
+                  const visibility: JawMark["visibility"] =
+                    event.target.value === "invisible" ? "invisible" : "visible";
+                  setPoints((previous) => ({
+                    ...previous,
+                    [target]: previous[target] ? { ...previous[target], visibility } : undefined,
+                  }));
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
     </Modal>
   );

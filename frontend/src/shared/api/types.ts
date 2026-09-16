@@ -49,7 +49,11 @@ export type FineStage = {
 };
 export type KeyframePoint = { frame: number; view: string; x: number; y: number };
 export type OperatorHand = "left" | "right";
-export type JawMark = { visibility: "visible"; x: number; y: number } | { visibility: "invisible" };
+export type JawMark = {
+  visibility: "visible" | "invisible";
+  x: number;
+  y: number;
+};
 export type AnnotationOutcome = "pending" | "success" | "failure";
 export type SegmentValidity = "pending" | "valid" | "invalid";
 export type InvalidSegmentReasonCode =

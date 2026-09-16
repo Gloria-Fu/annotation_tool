@@ -6,7 +6,7 @@ const group: GripperKeyframe = {
   frame: 5,
   view: "head",
   left: { visibility: "visible", x: 0.3, y: 0.5 },
-  right: { visibility: "invisible" },
+  right: { visibility: "invisible", x: 0.7, y: 0.5 },
 };
 const fine: FineAnnotation = {
   object_name: "",
@@ -44,9 +44,20 @@ describe("hand-scoped gripper keyframes", () => {
       ["右手关键帧标记"],
     );
   });
-  it("requires both jaws, permitting explicit invisibility without coordinates", () => {
+  it("requires coordinates and visibility for both jaws", () => {
     expect(completeGripper(group)).toBe(true);
-    expect(completeGripper({ ...group, left: { visibility: "invisible" } })).toBe(true);
+    expect(
+      completeGripper({
+        ...group,
+        left: { visibility: "invisible", x: 0.3, y: 0.5 },
+      }),
+    ).toBe(true);
+    expect(
+      completeGripper({
+        ...group,
+        left: { visibility: "invisible", x: NaN, y: 0.5 },
+      }),
+    ).toBe(false);
     expect(completeGripper({ ...group, right: undefined })).toBe(false);
     expect(completeGripper({ ...group, right: group.left })).toBe(false);
     expect(completeGripper({ ...group, left: { visibility: "visible", x: NaN, y: 0 } })).toBe(

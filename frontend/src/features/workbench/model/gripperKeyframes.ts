@@ -19,14 +19,13 @@ export function annotationHands(fine: FineAnnotation): OperatorHand[] {
 export function validJaw(mark?: JawMark): boolean {
   return (
     !!mark &&
-    (mark.visibility === "invisible" ||
-      (mark.visibility === "visible" &&
-        Number.isFinite(mark.x) &&
-        Number.isFinite(mark.y) &&
-        mark.x >= 0 &&
-        mark.x <= 1 &&
-        mark.y >= 0 &&
-        mark.y <= 1))
+    (mark.visibility === "visible" || mark.visibility === "invisible") &&
+    Number.isFinite(mark.x) &&
+    Number.isFinite(mark.y) &&
+    mark.x >= 0 &&
+    mark.x <= 1 &&
+    mark.y >= 0 &&
+    mark.y <= 1
   );
 }
 export function completeGripper(group: GripperKeyframe): boolean {
@@ -54,7 +53,7 @@ export function gripperIssues(fine: FineAnnotation, start: number, end: number):
     )
       issues.push(handLabel(hand) + "片段内 HEAD 关键帧");
     if (!completeGripper(group))
-      issues.push(handLabel(hand) + "左右夹标记（坐标或不可见，坐标不能重合）");
+      issues.push(handLabel(hand) + "左右夹都需标点，并分别选择可见或不可见");
     return issues;
   });
 }

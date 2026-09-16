@@ -603,6 +603,11 @@ body {
   cursor: move;
   touch-action: none;
 }
+.gripper-landmark.estimated {
+  border-style: dashed;
+  background: #f5b301;
+  box-shadow: 0 0 0 2px #a16207;
+}
 .gripper-landmark > span {
   position: absolute;
   top: 24px;

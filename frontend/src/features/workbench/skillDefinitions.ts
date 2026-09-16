@@ -38,7 +38,7 @@ const field = (
 const states = ["张开", "闭合", "无法判断"];
 const actions = ["张开", "闭合", "保持张开", "保持闭合", "无法判断"];
 const liftGripperOptions = ["左手夹爪", "右手夹爪", "双手夹爪"];
-const liftActionOptions = ["向上抬起", "无动作"];
+const liftActionOptions = ["向上抬起", "无动作", "其他"];
 const placeReleaseModes = ["接触支撑面后释放", "空中释放后落至目标位置", "无法判断释放方式"];
 const skillTemplateDefaults: Partial<Record<SkillName, Record<string, string>>> = {
   Pick: {
@@ -275,7 +275,7 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
     name: "Pick",
     label: "拾取",
     keyframeDefinition: "物体被夹爪夹持住的瞬间",
-    requiredObjects: ["每只操作手夹持物体时的左夹和右夹位置；看不见的夹指标为不可见"],
+    requiredObjects: ["每只操作手夹持物体时的左夹和右夹位置；看不见也要估点并标为不可见"],
     tokens: tokens("Pick"),
   },
   {
@@ -354,6 +354,7 @@ export function sentenceTokensForOutput(
   const tokens = sentenceTokens(skill, values);
   const hasLiftAction = values.lift_action === "向上抬起";
   const noLiftAction = values.lift_action === "无动作";
+  const otherLiftAction = values.lift_action === "其他";
   if (skill === "Pick") {
     const liftIndex = tokens.findIndex(
       (token) => typeof token !== "string" && token.key === "lift_gripper",
@@ -361,6 +362,17 @@ export function sentenceTokensForOutput(
     if (liftIndex < 0) return tokens;
     const base = tokens.slice(0, liftIndex - 1);
     if (noLiftAction) return [...base, "。"];
+    if (otherLiftAction) {
+      const liftGripper = tokens[liftIndex];
+      const customAction = tokens.find(
+        (token) => typeof token !== "string" && token.key === "lift_action_other",
+      );
+      const tail: SentenceToken[] = ["。"];
+      if (values.lift_gripper?.trim() && liftGripper) tail.push(liftGripper);
+      if (customAction) tail.push(customAction);
+      tail.push("。");
+      return [...base, ...tail];
+    }
     if (!hasLiftAction) return tokens;
     const liftGripper = tokens[liftIndex];
     const liftAction = tokens[liftIndex + 1];
@@ -377,6 +389,17 @@ export function sentenceTokensForOutput(
     if (liftIndex < 0) return tokens;
     const base = tokens.slice(0, liftIndex - 1);
     if (noLiftAction) return [...base, "。"];
+    if (otherLiftAction) {
+      const liftGripper = tokens[liftIndex];
+      const customAction = tokens.find(
+        (token) => typeof token !== "string" && token.key === "lift_action_other",
+      );
+      const tail: SentenceToken[] = ["。"];
+      if (values.lift_gripper?.trim() && liftGripper) tail.push(liftGripper);
+      if (customAction) tail.push(customAction);
+      tail.push("。");
+      return [...base, ...tail];
+    }
     if (!hasLiftAction) return tokens;
     const liftGripper = tokens[liftIndex];
     const liftAction = tokens[liftIndex + 1];
@@ -389,14 +412,26 @@ export function sentenceTokensForOutput(
   return tokens;
 }
 export function sentenceTokens(skill: string, values: Record<string, string>): SentenceToken[] {
-  if (isSeparateObjectMode(skill, values)) return separateObjectTokens(skill);
-  return (getSkillDefinition(skill)?.tokens || []).flatMap((token): SentenceToken[] => {
-    if (typeof token === "string" || values.operator_hand !== "双手") return [token];
-    if (token.key !== "initial_state" && token.key !== "gripper_action") return [token];
+  const tokens = isSeparateObjectMode(skill, values)
+    ? separateObjectTokens(skill)
+    : (getSkillDefinition(skill)?.tokens || []).flatMap((token): SentenceToken[] => {
+        if (typeof token === "string" || values.operator_hand !== "双手") return [token];
+        if (token.key !== "initial_state" && token.key !== "gripper_action") return [token];
+        return [
+          { ...token, key: token.key + "_left", label: "左手" + token.label },
+          "、",
+          { ...token, key: token.key + "_right", label: "右手" + token.label },
+        ];
+      });
+  const liftActionIndex = tokens.findIndex(
+    (token) => typeof token !== "string" && token.key === "lift_action",
+  );
+  if (liftActionIndex >= 0 && values.lift_action === "其他") {
     return [
-      { ...token, key: token.key + "_left", label: "左手" + token.label },
-      "、",
-      { ...token, key: token.key + "_right", label: "右手" + token.label },
+      ...tokens.slice(0, liftActionIndex + 1),
+      field("lift_action_other", "其他收尾动作和状态", "如：向前移开夹爪"),
+      ...tokens.slice(liftActionIndex + 1),
     ];
-  });
+  }
+  return tokens;
 }

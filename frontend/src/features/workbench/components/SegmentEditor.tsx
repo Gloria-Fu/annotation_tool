@@ -565,17 +565,17 @@ export function SegmentEditor({
                     {group && (
                       <Typography.Text type="secondary">
                         左夹：
-                        {group.left?.visibility === "invisible"
-                          ? "不可见"
-                          : group.left
-                            ? "已标记"
-                            : "未标记"}
+                        {group.left
+                          ? group.left.visibility === "invisible"
+                            ? "不可见（已估点）"
+                            : "可见（已标点）"
+                          : "未标点"}
                         {" · "}右夹：
-                        {group.right?.visibility === "invisible"
-                          ? "不可见"
-                          : group.right
-                            ? "已标记"
-                            : "未标记"}
+                        {group.right
+                          ? group.right.visibility === "invisible"
+                            ? "不可见（已估点）"
+                            : "可见（已标点）"
+                          : "未标点"}
                       </Typography.Text>
                     )}
                   </div>

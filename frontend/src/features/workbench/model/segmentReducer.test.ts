@@ -79,8 +79,8 @@ describe("segmentReducer", () => {
         right: {
           frame: 5,
           view: "head",
-          left: { visibility: "invisible" as const },
-          right: { visibility: "invisible" as const },
+          left: { visibility: "invisible" as const, x: 0.3, y: 0.5 },
+          right: { visibility: "invisible" as const, x: 0.7, y: 0.5 },
         },
       },
     };
