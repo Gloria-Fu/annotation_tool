@@ -346,7 +346,7 @@ export function WorkbenchPage() {
             )}
           </span>
         }
-        subtitle={`${context.length} 帧 · ${(context.length / fps).toFixed(2)} 秒 · ${context.tasks.join(" / ")}`}
+        subtitle={`${context.length} 帧 · ${(context.length / fps).toFixed(2)} 秒`}
         leading={
           <button
             type="button"
