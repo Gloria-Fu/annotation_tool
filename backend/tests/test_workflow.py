@@ -260,6 +260,51 @@ def test_quality_batch_persists_sample_and_checked_revision(db, tmp_path, monkey
     assert quality_history(item.id, admin, db)[0].batch_id == batch.id
 
 
+def test_quality_batch_excludes_items_already_sampled_by_any_batch(db, tmp_path, monkeypatch):
+    admin, _, _, package, first_item = setup_item(db, tmp_path, monkeypatch)
+    items = [first_item]
+    for index in range(1, 5):
+        episode = DatasetEpisode(
+            dataset_id=package.dataset_id,
+            episode_index=index,
+            length=10,
+            data_path=f"data-{index}.parquet",
+            video_paths={},
+        )
+        db.add(episode)
+        db.flush()
+        item = TaskItem(
+            package_id=package.id,
+            episode_id=episode.id,
+            claim_order=index,
+            status=ItemStatus.COMPLETED,
+            qa_status=QaStatus.UNCHECKED,
+        )
+        db.add(item)
+        items.append(item)
+    first_item.status = ItemStatus.COMPLETED
+    first_item.qa_status = QaStatus.UNCHECKED
+    db.commit()
+
+    first_batch = create_batch(
+        QualityBatchCreate(package_id=package.id, mode="count", count=2, seed="quality"),
+        admin,
+        db,
+    )
+    first_sampled_ids = {sample.task_item_id for sample in first_batch.samples}
+    assert len(first_sampled_ids) == 2
+
+    second_batch = create_batch(
+        QualityBatchCreate(package_id=package.id, mode="all", seed="quality"),
+        admin,
+        db,
+    )
+    second_sampled_ids = {sample.task_item_id for sample in second_batch.samples}
+
+    assert first_sampled_ids.isdisjoint(second_sampled_ids)
+    assert first_sampled_ids | second_sampled_ids == {item.id for item in items}
+
+
 def test_quality_batch_manager_can_check_and_reviewer_cannot(db, tmp_path, monkeypatch):
     admin, annotator, reviewer, package, item = setup_item(db, tmp_path, monkeypatch)
     manager = make_user(db, "quality-manager", Role.ANNOTATION_MANAGER)

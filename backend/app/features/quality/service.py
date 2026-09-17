@@ -44,6 +44,7 @@ def _eligible_items(db: Session, package_id: str, only_unchecked: bool) -> list[
     statement = select(TaskItem).where(
         TaskItem.package_id == package_id,
         TaskItem.status == ItemStatus.COMPLETED,
+        ~TaskItem.id.in_(select(QualitySample.task_item_id)),
     )
     if only_unchecked:
         statement = statement.where(TaskItem.qa_status == QaStatus.UNCHECKED)
