@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Button,
@@ -14,7 +14,7 @@ import {
   message,
 } from "antd";
 import { Eye, History, Shuffle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
 import type { QualitySample, TaskPackage, User } from "../../shared/api/types";
 import { queryKeys } from "../../shared/queryKeys";
@@ -23,6 +23,7 @@ import { statusLabels } from "../../shared/constants/labels";
 import { taskPackagesApi } from "../task-packages/api";
 import { usersApi } from "../users/api";
 import { qualityApi } from "./api";
+import { qualityPagePath, qualitySelectionFromSearch, qualityWorkbenchPath } from "./navigation";
 
 type SamplingMode = "all" | "ratio" | "count";
 
@@ -39,9 +40,13 @@ function errorMessage(error: unknown): string {
 export function QualityPage() {
   const { projectId, user } = useShell();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSelection = qualitySelectionFromSearch(searchParams);
   const queryClient = useQueryClient();
-  const [packageId, setPackageId] = useState<string>();
-  const [selectedBatchId, setSelectedBatchId] = useState<string>();
+  const [packageId, setPackageId] = useState<string | undefined>(initialSelection.packageId);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | undefined>(
+    initialSelection.batchId,
+  );
   const [samplingMode, setSamplingMode] = useState<SamplingMode>("ratio");
   const [samplePercent, setSamplePercent] = useState(10);
   const [sampleCount, setSampleCount] = useState(20);
@@ -83,11 +88,37 @@ export function QualityPage() {
     queryFn: () => qualityApi.history(historyItem?.task_item_id as string),
     enabled: !!historyItem,
   });
+  const effectivePackageId = packageId ?? batch?.package_id;
+  const selectPackage = useCallback(
+    (nextPackageId: string | undefined) => {
+      setPackageId(nextPackageId);
+      setSelectedBatchId(undefined);
+      setCreateFailure(null);
+      void navigate(qualityPagePath({ packageId: nextPackageId }), { replace: true });
+    },
+    [navigate],
+  );
+  const selectBatch = useCallback(
+    (nextBatchId: string, nextPackageId: string) => {
+      setPackageId(nextPackageId);
+      setSelectedBatchId(nextBatchId);
+      void navigate(qualityPagePath({ packageId: nextPackageId, batchId: nextBatchId }), {
+        replace: true,
+      });
+    },
+    [navigate],
+  );
+  useEffect(() => {
+    if (!batch || packageId === batch.package_id) return;
+    setSearchParams(new URLSearchParams({ package_id: batch.package_id, batch_id: batch.id }), {
+      replace: true,
+    });
+  }, [batch, packageId, setSearchParams]);
   const create = useMutation({
     onMutate: () => setCreateFailure(null),
     mutationFn: () =>
       qualityApi.createBatch({
-        package_id: packageId as string,
+        package_id: effectivePackageId as string,
         assignee_id: assigneeId,
         mode: samplingMode,
         percent: samplePercent,
@@ -96,7 +127,7 @@ export function QualityPage() {
         only_unchecked: onlyUnchecked,
       }),
     onSuccess: (created) => {
-      setSelectedBatchId(created.id);
+      selectBatch(created.id, created.package_id);
       message.success(`已生成 ${created.total_samples} 条抽检清单`);
       void queryClient.invalidateQueries({ queryKey: queryKeys.qualityBatches(projectId) });
     },
@@ -124,12 +155,15 @@ export function QualityPage() {
     onError: (error: unknown) => message.error(errorMessage(error)),
   });
 
-  const visibleBatches = packageId
-    ? batches.filter((entry) => entry.package_id === packageId)
+  const visibleBatches = effectivePackageId
+    ? batches.filter((entry) => entry.package_id === effectivePackageId)
     : batches;
-  const selectedPackage = packages.find((entry) => entry.id === packageId);
+  const selectedPackage = packages.find((entry) => entry.id === effectivePackageId);
+  const packageTitleById = new Map(packages.map((entry) => [entry.id, entry.title]));
+  const usernameById = new Map(users.map((entry) => [entry.id, entry.username]));
+  const batchPackageTitle = batch ? packageTitleById.get(batch.package_id) : undefined;
   const createDisabledReason =
-    !packageId || !canManage
+    !effectivePackageId || !canManage
       ? null
       : selectedPackage && selectedPackage.reviewed_items <= 0
         ? "所选任务包暂无已审核完成任务，不能生成抽检清单"
@@ -141,12 +175,8 @@ export function QualityPage() {
       <PageHeading title="质量抽检" subtitle="抽检批次、样本和标注版本均会保存，可随时复盘" />
       <div className="toolbar">
         <Select
-          value={packageId}
-          onChange={(value) => {
-            setPackageId(value);
-            setSelectedBatchId(undefined);
-            setCreateFailure(null);
-          }}
+          value={effectivePackageId}
+          onChange={selectPackage}
           placeholder="选择任务包"
           style={{ width: 280 }}
           options={packages.map((item: TaskPackage) => ({ value: item.id, label: item.title }))}
@@ -212,7 +242,7 @@ export function QualityPage() {
         <Button
           type="primary"
           icon={<Shuffle size={15} />}
-          disabled={!packageId || !canManage || !!createDisabledReason}
+          disabled={!effectivePackageId || !canManage || !!createDisabledReason}
           loading={create.isPending}
           onClick={() => create.mutate()}
         >
@@ -237,12 +267,17 @@ export function QualityPage() {
           size="small"
           dataSource={visibleBatches}
           pagination={{ pageSize: 5 }}
-          locale={{ emptyText: packageId ? "暂无历史批次" : "请先选择任务包" }}
+          locale={{ emptyText: effectivePackageId ? "暂无历史批次" : "请先选择任务包" }}
           columns={[
             {
               title: "创建时间",
               dataIndex: "created_at",
               render: (value: string) => new Date(value).toLocaleString(),
+            },
+            {
+              title: "任务包",
+              dataIndex: "package_id",
+              render: (value: string) => packageTitleById.get(value) || value.slice(0, 8),
             },
             {
               title: "规则",
@@ -253,7 +288,10 @@ export function QualityPage() {
             {
               title: "负责人",
               dataIndex: "assignee_id",
-              render: (value: string | null) => value?.slice(0, 8) || "创建人",
+              render: (value: string | null, row) =>
+                value
+                  ? usernameById.get(value) || value.slice(0, 8)
+                  : usernameById.get(row.created_by_id) || "创建人",
             },
             {
               title: "进度",
@@ -271,7 +309,7 @@ export function QualityPage() {
             {
               title: "操作",
               render: (_, row) => (
-                <Button size="small" onClick={() => setSelectedBatchId(row.id)}>
+                <Button size="small" onClick={() => selectBatch(row.id, row.package_id)}>
                   查看批次
                 </Button>
               ),
@@ -282,14 +320,16 @@ export function QualityPage() {
 
       <div className="table-panel">
         <Typography.Title level={5}>
-          {batch ? `抽检清单 · ${batch.id.slice(0, 8)}` : "抽检清单"}
+          {batch
+            ? `${batchPackageTitle || batch.package_id.slice(0, 8)} · 抽检清单 · ${batch.id.slice(0, 8)}`
+            : "抽检清单"}
         </Typography.Title>
         <Table<QualitySample>
           rowKey="id"
           dataSource={selectedSamples}
           loading={batchLoading}
           locale={{
-            emptyText: packageId ? "请生成或选择抽检批次" : "请先选择任务包",
+            emptyText: effectivePackageId ? "请生成或选择抽检批次" : "请先选择任务包",
           }}
           columns={[
             {
@@ -338,7 +378,14 @@ export function QualityPage() {
                   <Button
                     size="small"
                     icon={<Eye size={14} />}
-                    onClick={() => void navigate(`/work/${row.task_item_id}`)}
+                    onClick={() =>
+                      void navigate(
+                        qualityWorkbenchPath(row.task_item_id, {
+                          packageId: batch?.package_id,
+                          batchId: row.batch_id,
+                        }),
+                      )
+                    }
                   >
                     查看
                   </Button>

@@ -2,11 +2,18 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal, Typography, message } from "antd";
 import { ArrowLeft } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
-import type { FineAnnotation, Segment, WorkContext } from "../../shared/api/types";
+import type { FineAnnotation, QualitySample, Segment, WorkContext } from "../../shared/api/types";
+import { statusLabels } from "../../shared/constants/labels";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
+import { qualityApi } from "../quality/api";
+import {
+  qualityPagePath,
+  qualitySelectionFromSearch,
+  qualityWorkbenchPath,
+} from "../quality/navigation";
 import { workbenchApi } from "./api";
 import { MultiViewPlayer } from "./components/MultiViewPlayer";
 import { SegmentEditor } from "./components/SegmentEditor";
@@ -14,6 +21,7 @@ import { Timeline } from "./components/Timeline";
 import { WorkbenchToolbar } from "./components/WorkbenchToolbar";
 import { useAutosave } from "./hooks/useAutosave";
 import { useVideoSync } from "./hooks/useVideoSync";
+import { canAnnotateItem, canReviewItem, isWorkbenchReadOnly } from "./workPermissions";
 import { createBlankSegment, createWorkbenchState, segmentReducer } from "./model/segmentReducer";
 import { formatFrameTime } from "./model/timelineMath";
 import { currentFineAnnotation, fineAnnotationText, templateIssues } from "./model/fineAnnotation";
@@ -47,11 +55,24 @@ function initialSegments(context: WorkContext): Segment[] {
     : [createBlankSegment(context.length)];
 }
 
+function nextPendingQualitySample(
+  samples: QualitySample[],
+  currentItemId: string,
+): QualitySample | undefined {
+  const current = samples.find((sample) => sample.task_item_id === currentItemId);
+  if (!current) return samples.find((sample) => !sample.latest_check);
+  return (
+    samples.find((sample) => sample.sample_order > current.sample_order && !sample.latest_check) ||
+    samples.find((sample) => sample.task_item_id !== currentItemId && !sample.latest_check)
+  );
+}
+
 export function WorkbenchPage() {
   const { itemId = "" } = useParams();
   const { user } = useShell();
-  const readOnly = user.role === "outsourcing_manager";
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const qualitySelection = qualitySelectionFromSearch(searchParams);
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(segmentReducer, [], () => createWorkbenchState());
   const [selectedId, setSelectedId] = useState<string>();
@@ -72,6 +93,13 @@ export function WorkbenchPage() {
     queryFn: () => workbenchApi.context(itemId),
     enabled: !!itemId,
   });
+  const { data: qualityBatch } = useQuery({
+    queryKey: qualitySelection.batchId
+      ? queryKeys.qualityBatch(qualitySelection.batchId)
+      : queryKeys.qualityBatch("empty"),
+    queryFn: () => qualityApi.batch(qualitySelection.batchId as string),
+    enabled: !!qualitySelection.batchId,
+  });
 
   useEffect(() => {
     if (!context || initialized.current) return;
@@ -87,13 +115,30 @@ export function WorkbenchPage() {
   const videoSync = useVideoSync(length, fps);
   const selected = state.segments.find((segment) => segment.id === selectedId) || state.segments[0];
   const selectedFine = selected ? currentFineAnnotation(selected) : undefined;
-  const reviewing = context?.item.reviewer_id === user.id;
+  const canEditAnnotation = context ? canAnnotateItem(context.item, user.id) : false;
+  const reviewing = context ? canReviewItem(context.item, user.id) : false;
+  const readOnly = context ? isWorkbenchReadOnly(context.item, user) : true;
+  const qualitySample = qualityBatch?.samples.find((sample) => sample.task_item_id === itemId);
+  const nextQualitySample = qualityBatch
+    ? nextPendingQualitySample(qualityBatch.samples, itemId)
+    : undefined;
+  const qualityReturnPath = qualityPagePath({
+    packageId: qualityBatch?.package_id ?? qualitySelection.packageId,
+    batchId: qualityBatch?.id ?? qualitySelection.batchId,
+  });
+  const returnFromWorkbench = useCallback(() => {
+    if (qualitySelection.batchId) {
+      void navigate(qualityReturnPath);
+      return;
+    }
+    void navigate(-1);
+  }, [navigate, qualityReturnPath, qualitySelection.batchId]);
   const autosave = useAutosave({
     itemId,
     segments: state.segments,
     dirty,
     disabled:
-      readOnly ||
+      !canEditAnnotation ||
       reviewing ||
       state.segments.some((segment) => {
         const skill = segment.fine_annotation?.skill || segment.skill;
@@ -171,12 +216,40 @@ export function WorkbenchPage() {
     },
     onError: (error: Error) => message.error(error.message),
   });
+  const qualityCheck = useMutation({
+    mutationFn: ({ result, comment }: { result: "passed" | "rejected"; comment?: string }) =>
+      qualityApi.check(qualitySelection.batchId as string, itemId, result, comment),
+    onSuccess: (_, variables) => {
+      message.success(variables.result === "passed" ? "抽检通过已记录" : "抽检退回已记录");
+      if (qualitySelection.batchId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.qualityBatch(qualitySelection.batchId),
+        });
+      }
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.qualityBatches(qualityBatch?.project_id),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.qualityHistory(itemId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workContext(itemId) });
+    },
+    onError: (error: Error) => message.error(error.message),
+  });
+  const goNextQualitySample = useCallback(() => {
+    if (!nextQualitySample || !qualityBatch) return;
+    void navigate(
+      qualityWorkbenchPath(nextQualitySample.task_item_id, {
+        packageId: qualityBatch.package_id,
+        batchId: qualityBatch.id,
+      }),
+      { replace: true },
+    );
+  }, [navigate, nextQualitySample, qualityBatch]);
   const markDirty = useCallback(() => {
     if (readOnly) return;
     setDirty(true);
     setReviewDraftSaved(false);
     setReviewSaveError(null);
-  }, [readOnly]);
+  }, [readOnly, setDirty, setReviewDraftSaved, setReviewSaveError]);
 
   const onFineChange = useCallback(
     (fine_annotation: FineAnnotation, text: string) => {
@@ -186,7 +259,7 @@ export function WorkbenchPage() {
       dispatch({ type: "update-fine", id: selected.id, fine_annotation, text });
       markDirty();
     },
-    [markDirty, readOnly, selected],
+    [dispatch, markDirty, readOnly, selected, setPointMarking],
   );
   const split = useCallback(() => {
     if (readOnly) return;
@@ -205,10 +278,10 @@ export function WorkbenchPage() {
     } else {
       message.info("请将播放头放在当前片段内部");
     }
-  }, [markDirty, readOnly, selected, videoSync.currentFrame]);
+  }, [dispatch, markDirty, readOnly, selected, setSelectedId, videoSync.currentFrame]);
   const clear = useCallback(() => {
     if (!readOnly) setClearOpen(true);
-  }, [readOnly]);
+  }, [readOnly, setClearOpen]);
   const confirmClear = () => {
     if (readOnly) return;
     dispatch({ type: "clear", length });
@@ -222,10 +295,10 @@ export function WorkbenchPage() {
       dispatch({ type: "move-boundary", index, frame, length });
       markDirty();
     },
-    [length, markDirty, readOnly],
+    [dispatch, length, markDirty, readOnly],
   );
-  const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), []);
-  const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), []);
+  const onBoundaryDragStart = useCallback(() => dispatch({ type: "begin-boundary" }), [dispatch]);
+  const onBoundaryDragEnd = useCallback(() => dispatch({ type: "commit" }), [dispatch]);
   const onSelectSegment = useCallback(
     (segment: Segment) => {
       pointMarkedCallback.current = undefined;
@@ -233,7 +306,7 @@ export function WorkbenchPage() {
       setSelectedId(segment.id);
       videoSync.playSegment(segment.start_frame, segment.end_frame);
     },
-    [videoSync],
+    [setPointMarking, setSelectedId, videoSync],
   );
   const navigateSegment = useCallback(
     (direction: "previous" | "replay" | "next") => {
@@ -250,7 +323,7 @@ export function WorkbenchPage() {
         videoSync.playSegment(target.start_frame, target.end_frame);
       }
     },
-    [selected, state.segments, videoSync],
+    [selected, setSelectedId, state.segments, videoSync],
   );
   const navigateFromToolbar = useCallback(
     (direction: "previous" | "next") => navigateSegment(direction),
@@ -269,7 +342,7 @@ export function WorkbenchPage() {
       dispatch({ type: "merge", id: selected.id, direction });
       markDirty();
     },
-    [markDirty, readOnly, selected, state.segments],
+    [dispatch, markDirty, readOnly, selected, state.segments],
   );
   const canCreateRetry =
     !!selected &&
@@ -285,7 +358,7 @@ export function WorkbenchPage() {
     setSelectedId(newId);
     markDirty();
     videoSync.playSegment(boundary, selected.end_frame);
-  }, [canCreateRetry, markDirty, readOnly, selected, videoSync]);
+  }, [canCreateRetry, dispatch, markDirty, readOnly, selected, setSelectedId, videoSync]);
 
   const nudgeFrame = useCallback(
     (delta: number) => videoSync.pauseAtFrame(videoSync.currentFrame + delta),
@@ -353,7 +426,7 @@ export function WorkbenchPage() {
             className="workbench-back-button"
             aria-label="返回上一个页面"
             title="返回上一个页面"
-            onClick={() => void navigate(-1)}
+            onClick={returnFromWorkbench}
           >
             <ArrowLeft size={18} aria-hidden="true" />
           </button>
@@ -375,15 +448,13 @@ export function WorkbenchPage() {
             onFrameChange={videoSync.syncFrame}
             pointMarking={pointMarking}
             keyframePoint={
-              selectedFine?.segment_validity === "valid" && selectedFine.skill !== "Place"
+              selectedFine?.segment_validity === "valid" &&
+              selectedFine.skill !== "Pick" &&
+              selectedFine.skill !== "Place"
                 ? selectedFine.keyframe_point
                 : undefined
             }
-            gripperPoints={
-              selectedFine?.segment_validity === "valid" && selectedFine.skill === "Pick"
-                ? selected.fine_annotation
-                : undefined
-            }
+            gripperPoints={undefined}
             currentFrame={videoSync.currentFrame}
             onPointMarked={(view, x, y) => {
               pointMarkedCallback.current?.({ frame: videoSync.currentFrame, view, x, y });
@@ -510,9 +581,23 @@ export function WorkbenchPage() {
           onSave={() => (reviewing ? saveReviewDraft.mutate() : saveDraft.mutate())}
           onSubmit={() => submit.mutate()}
           onReview={(decision, comment) => review.mutate({ decision, comment })}
+          qualityCheck={
+            qualitySelection.batchId && qualitySample && qualityBatch
+              ? {
+                  checkedLabel: qualitySample.latest_check
+                    ? `已${statusLabels[qualitySample.latest_check.result] || qualitySample.latest_check.result}`
+                    : undefined,
+                  canCheck: !qualitySample.latest_check && qualityBatch.status === "open",
+                  loading: qualityCheck.isPending,
+                  onPass: () => qualityCheck.mutate({ result: "passed" }),
+                  onReject: (comment) => qualityCheck.mutate({ result: "rejected", comment }),
+                  onNext: nextQualitySample ? goNextQualitySample : undefined,
+                }
+              : undefined
+          }
           isSaving={saveDraft.isPending || autosave.isSaving || saveReviewDraft.isPending}
           isSubmitting={submit.isPending || review.isPending}
-          canSubmit={!submitDisabled}
+          canSubmit={!readOnly && !submitDisabled}
           canCreateRetry={canCreateRetry}
           reviewReason={context.review_comment}
           qualityReason={context.quality_comment}

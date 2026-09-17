@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Segment } from "../../../shared/api/types";
 import { SegmentEditor } from "./SegmentEditor";
 
@@ -17,6 +17,10 @@ beforeEach(() => {
       dispatchEvent: vi.fn(),
     })),
   });
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 const twoHandPlace: Segment = {
@@ -89,5 +93,75 @@ it("shows separate Place keyframe controls for left and right hands", () => {
 
   expect(screen.getByRole("button", { name: /记录当前帧\s*左手/ })).toBeVisible();
   expect(screen.getByRole("button", { name: /记录当前帧\s*右手/ })).toBeVisible();
-  expect(screen.getByText("双手分别记录夹爪完全打开的时刻，不标记左夹和右夹位置")).toBeVisible();
+  expect(screen.getByText("双手分别记录关键帧，只记录帧号，不标记夹爪位置")).toBeVisible();
+});
+
+it("hides submit actions in read-only quality sampling review", () => {
+  render(
+    <SegmentEditor
+      selected={{ ...twoHandPlace, annotation_status: "confirmed" }}
+      reviewing={false}
+      fps={30}
+      currentFrame={5}
+      pointMarking={false}
+      onBeginPointMark={vi.fn()}
+      onBeginGripperMark={vi.fn()}
+      onJumpFrame={vi.fn()}
+      onFineChange={vi.fn()}
+      onSave={vi.fn()}
+      onSubmit={vi.fn()}
+      onReview={vi.fn()}
+      onConfirm={vi.fn()}
+      onNavigate={vi.fn()}
+      onCreateRetry={vi.fn()}
+      isSaving={false}
+      isSubmitting={false}
+      canSubmit
+      canCreateRetry={false}
+      readOnly
+    />,
+  );
+
+  expect(screen.getByText("只读查看")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "提交审核" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "保存草稿" })).not.toBeInTheDocument();
+});
+
+it("shows quality check actions for read-only quality workbench entries", () => {
+  render(
+    <SegmentEditor
+      selected={{ ...twoHandPlace, annotation_status: "confirmed" }}
+      reviewing={false}
+      fps={30}
+      currentFrame={5}
+      pointMarking={false}
+      onBeginPointMark={vi.fn()}
+      onBeginGripperMark={vi.fn()}
+      onJumpFrame={vi.fn()}
+      onFineChange={vi.fn()}
+      onSave={vi.fn()}
+      onSubmit={vi.fn()}
+      onReview={vi.fn()}
+      qualityCheck={{
+        canCheck: true,
+        loading: false,
+        onPass: vi.fn(),
+        onReject: vi.fn(),
+        onNext: vi.fn(),
+      }}
+      onConfirm={vi.fn()}
+      onNavigate={vi.fn()}
+      onCreateRetry={vi.fn()}
+      isSaving={false}
+      isSubmitting={false}
+      canSubmit={false}
+      canCreateRetry={false}
+      readOnly
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: "抽检通过" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "抽检退回" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "下一条" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "提交审核" })).not.toBeInTheDocument();
 });

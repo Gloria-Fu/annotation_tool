@@ -1,4 +1,4 @@
-import { Crosshair, Flag, RotateCcw } from "lucide-react";
+import { ArrowRight, Crosshair, Flag, RotateCcw } from "lucide-react";
 import { Button, Input, Modal, Segmented, Select, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import type {
@@ -9,7 +9,7 @@ import type {
   OperatorHand,
   SegmentValidity,
 } from "../../../shared/api/types";
-import { annotationHands, handLabel, completeGripper } from "../model/gripperKeyframes";
+import { annotationHands, handLabel } from "../model/gripperKeyframes";
 import { durationSeconds, formatFrameTime } from "../model/timelineMath";
 import {
   currentFineAnnotation,
@@ -38,12 +38,12 @@ export function SegmentEditor({
   currentFrame,
   pointMarking,
   onBeginPointMark,
-  onBeginGripperMark,
   onJumpFrame,
   onFineChange,
   onSave,
   onSubmit,
   onReview,
+  qualityCheck,
   onConfirm,
   onNavigate,
   onCreateRetry,
@@ -69,6 +69,14 @@ export function SegmentEditor({
   onSave: () => void;
   onSubmit: () => void;
   onReview: (decision: "approve" | "request_changes", comment?: string) => void;
+  qualityCheck?: {
+    checkedLabel?: string;
+    canCheck: boolean;
+    loading: boolean;
+    onPass: () => void;
+    onReject: (comment: string) => void;
+    onNext?: () => void;
+  };
   onConfirm: () => void;
   onNavigate: (direction: "previous" | "replay" | "next") => void;
   onCreateRetry: () => void;
@@ -82,6 +90,8 @@ export function SegmentEditor({
 }) {
   const [reviewComment, setReviewComment] = useState("");
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [qualityComment, setQualityComment] = useState("");
+  const [qualityModalOpen, setQualityModalOpen] = useState(false);
   if (!selected)
     return (
       <aside className="segment-editor">
@@ -176,8 +186,8 @@ export function SegmentEditor({
   const keyframeDefinitionText = definition?.keyframeDefinition;
   const requiredObjectsText = definition?.requiredObjects.join("、");
   const beginPointMark = () => onBeginPointMark((keyframe_point) => update({ keyframe_point }));
-  const recordedPlaceKeyframeFrame = placeKeyframeFrame(fine);
-  const recordPlaceKeyframe = (hand?: OperatorHand) => {
+  const recordedKeyframeFrame = placeKeyframeFrame(fine);
+  const recordKeyframe = (hand?: OperatorHand) => {
     if (currentFrame < selected.start_frame || currentFrame >= selected.end_frame) return;
     if (hand) {
       update({
@@ -187,7 +197,6 @@ export function SegmentEditor({
         gripper_keyframes: {
           ...fine.gripper_keyframes,
           [hand]: {
-            ...fine.gripper_keyframes?.[hand],
             frame: currentFrame,
             view: "head",
           },
@@ -542,74 +551,12 @@ export function SegmentEditor({
             </div>
           </div>
         )}
-        {segmentValidity === "valid" &&
-        fine.outcome !== "failure" &&
-        definition?.name === "Pick" ? (
-          <div>
-            <Typography.Text strong>关键帧位置</Typography.Text>
-            {annotationHands(fine).length === 0 && (
-              <Typography.Text type="secondary">请先选择操作手</Typography.Text>
-            )}
-            {annotationHands(fine).map((hand) => {
-              const group = fine.gripper_keyframes?.[hand];
-              const label = handLabel(hand);
-              return (
-                <div className="keyframe-point-control" key={hand}>
-                  <div>
-                    <Typography.Text strong>{label}</Typography.Text>
-                    <Typography.Text type="secondary">
-                      {group
-                        ? `帧 ${group.frame} · ${group.view} · ${completeGripper(group) ? "已完成" : "未完成"}`
-                        : "尚未标记"}
-                    </Typography.Text>
-                    {group && (
-                      <Typography.Text type="secondary">
-                        左夹：
-                        {group.left
-                          ? group.left.visibility === "invisible"
-                            ? "不可见（已估点）"
-                            : "可见（已标点）"
-                          : "未标点"}
-                        {" · "}右夹：
-                        {group.right
-                          ? group.right.visibility === "invisible"
-                            ? "不可见（已估点）"
-                            : "可见（已标点）"
-                          : "未标点"}
-                      </Typography.Text>
-                    )}
-                  </div>
-                  <Button
-                    icon={group ? <RotateCcw size={15} /> : <Crosshair size={15} />}
-                    disabled={!enabled}
-                    onClick={() =>
-                      onBeginGripperMark(hand, (group) =>
-                        update({
-                          gripper_keyframes: { ...fine.gripper_keyframes, [hand]: group },
-                        }),
-                      )
-                    }
-                  >
-                    {group ? "重新标记" : "标记"}
-                    {label}
-                  </Button>
-                  {group && (
-                    <Button size="small" onClick={() => onJumpFrame(group.frame)}>
-                      跳转到此帧
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : segmentValidity === "valid" &&
-          fine.outcome !== "failure" &&
-          definition?.name === "Place" ? (
+        {segmentValidity === "valid" && fine.outcome !== "failure" && isPickOrPlace ? (
           annotationHands(fine).length > 1 ? (
             <div>
               <Typography.Text strong>关键帧帧号</Typography.Text>
               <Typography.Text type="secondary">
-                双手分别记录夹爪完全打开的时刻，不标记左夹和右夹位置
+                双手分别记录关键帧，只记录帧号，不标记夹爪位置
               </Typography.Text>
               {annotationHands(fine).map((hand) => {
                 const frame = placeKeyframeFrame(fine, hand);
@@ -621,7 +568,7 @@ export function SegmentEditor({
                       <Typography.Text type="secondary">
                         {frame !== undefined
                           ? `帧 ${frame}`
-                          : "尚未记录，请将播放头定位到该手夹爪完全打开的时刻"}
+                          : "尚未记录，请将播放头定位到该手关键帧"}
                       </Typography.Text>
                     </div>
                     <Button
@@ -631,7 +578,7 @@ export function SegmentEditor({
                         currentFrame < selected.start_frame ||
                         currentFrame >= selected.end_frame
                       }
-                      onClick={() => recordPlaceKeyframe(hand)}
+                      onClick={() => recordKeyframe(hand)}
                     >
                       {frame !== undefined ? "重新记录当前帧" : "记录当前帧"}
                       {label}
@@ -650,31 +597,27 @@ export function SegmentEditor({
               <div>
                 <Typography.Text strong>关键帧帧号</Typography.Text>
                 <Typography.Text type="secondary">
-                  {recordedPlaceKeyframeFrame !== undefined
-                    ? `帧 ${recordedPlaceKeyframeFrame}`
-                    : "尚未记录，请将播放头定位到夹爪完全打开的时刻"}
+                  {recordedKeyframeFrame !== undefined
+                    ? `帧 ${recordedKeyframeFrame}`
+                    : "尚未记录，请将播放头定位到关键帧"}
                 </Typography.Text>
-                <Typography.Text type="secondary">只记录帧号，不标记左夹和右夹位置</Typography.Text>
+                <Typography.Text type="secondary">只记录帧号，不标记夹爪位置</Typography.Text>
               </div>
               <Button
                 icon={
-                  recordedPlaceKeyframeFrame !== undefined ? (
-                    <RotateCcw size={15} />
-                  ) : (
-                    <Flag size={15} />
-                  )
+                  recordedKeyframeFrame !== undefined ? <RotateCcw size={15} /> : <Flag size={15} />
                 }
                 disabled={
                   !enabled ||
                   currentFrame < selected.start_frame ||
                   currentFrame >= selected.end_frame
                 }
-                onClick={() => recordPlaceKeyframe()}
+                onClick={() => recordKeyframe()}
               >
-                {recordedPlaceKeyframeFrame !== undefined ? "重新记录当前帧" : "记录当前帧"}
+                {recordedKeyframeFrame !== undefined ? "重新记录当前帧" : "记录当前帧"}
               </Button>
-              {recordedPlaceKeyframeFrame !== undefined && (
-                <Button size="small" onClick={() => onJumpFrame(recordedPlaceKeyframeFrame)}>
+              {recordedKeyframeFrame !== undefined && (
+                <Button size="small" onClick={() => onJumpFrame(recordedKeyframeFrame)}>
                   跳转到此帧
                 </Button>
               )}
@@ -747,7 +690,7 @@ export function SegmentEditor({
           showCount
         />
         <Space wrap style={{ marginTop: 14 }}>
-          {fine.outcome === "failure" && (
+          {!readOnly && fine.outcome === "failure" && (
             <Button
               icon={<RotateCcw size={15} />}
               disabled={!enabled || !canCreateRetry}
@@ -756,39 +699,79 @@ export function SegmentEditor({
               从当前帧创建重试片段
             </Button>
           )}
-          <Button
-            type={selected.annotation_status === "confirmed" ? "default" : "primary"}
-            onClick={onConfirm}
-            disabled={issues.length > 0 || !enabled}
-          >
-            {selected.annotation_status === "confirmed"
-              ? reviewing
-                ? "已确认审核修改"
-                : "已确认标注结果"
-              : reviewing
-                ? "确认审核修改"
-                : "确认标注结果"}
-          </Button>
-          <Button onClick={onSave} disabled={!enabled} loading={isSaving}>
-            {reviewing ? "保存审核修改" : "保存草稿"}
-          </Button>
-          {reviewing ? (
+          {!readOnly && (
             <>
-              <Button danger loading={isSubmitting} onClick={() => setReviewModalOpen(true)}>
-                退回修改
-              </Button>
               <Button
-                type="primary"
-                disabled={!canSubmit}
-                loading={isSubmitting}
-                onClick={() => onReview("approve")}
+                type={selected.annotation_status === "confirmed" ? "default" : "primary"}
+                onClick={onConfirm}
+                disabled={issues.length > 0 || !enabled}
               >
-                审核通过
+                {selected.annotation_status === "confirmed"
+                  ? reviewing
+                    ? "已确认审核修改"
+                    : "已确认标注结果"
+                  : reviewing
+                    ? "确认审核修改"
+                    : "确认标注结果"}
               </Button>
+              <Button onClick={onSave} disabled={!enabled} loading={isSaving}>
+                {reviewing ? "保存审核修改" : "保存草稿"}
+              </Button>
+              {reviewing ? (
+                <>
+                  <Button danger loading={isSubmitting} onClick={() => setReviewModalOpen(true)}>
+                    退回修改
+                  </Button>
+                  <Button
+                    type="primary"
+                    disabled={!canSubmit}
+                    loading={isSubmitting}
+                    onClick={() => onReview("approve")}
+                  >
+                    审核通过
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="primary"
+                  disabled={!canSubmit}
+                  loading={isSubmitting}
+                  onClick={onSubmit}
+                >
+                  提交审核
+                </Button>
+              )}
             </>
-          ) : (
-            <Button type="primary" disabled={!canSubmit} loading={isSubmitting} onClick={onSubmit}>
-              提交审核
+          )}
+          {qualityCheck &&
+            (qualityCheck.checkedLabel ? (
+              <Typography.Text type="secondary">{qualityCheck.checkedLabel}</Typography.Text>
+            ) : (
+              <>
+                <Button
+                  type="primary"
+                  disabled={!qualityCheck.canCheck}
+                  loading={qualityCheck.loading}
+                  onClick={qualityCheck.onPass}
+                >
+                  抽检通过
+                </Button>
+                <Button
+                  danger
+                  disabled={!qualityCheck.canCheck}
+                  loading={qualityCheck.loading}
+                  onClick={() => {
+                    setQualityComment("");
+                    setQualityModalOpen(true);
+                  }}
+                >
+                  抽检退回
+                </Button>
+              </>
+            ))}
+          {qualityCheck?.onNext && (
+            <Button icon={<ArrowRight size={15} />} onClick={qualityCheck.onNext}>
+              下一条
             </Button>
           )}
         </Space>
@@ -810,6 +793,29 @@ export function SegmentEditor({
           value={reviewComment}
           onChange={(event) => setReviewComment(event.target.value)}
           placeholder="请填写需要修改的具体原因"
+        />
+      </Modal>
+      <Modal
+        open={qualityModalOpen}
+        title="填写抽检退回原因"
+        okText="确认退回"
+        cancelText="取消"
+        okButtonProps={{ danger: true, disabled: !qualityComment.trim() }}
+        confirmLoading={qualityCheck?.loading}
+        onCancel={() => {
+          if (!qualityCheck?.loading) setQualityModalOpen(false);
+        }}
+        onOk={() => {
+          if (!qualityComment.trim()) return;
+          qualityCheck?.onReject(qualityComment.trim());
+          setQualityModalOpen(false);
+        }}
+      >
+        <Input.TextArea
+          rows={4}
+          value={qualityComment}
+          onChange={(event) => setQualityComment(event.target.value)}
+          placeholder="请说明需要返工的问题"
         />
       </Modal>
     </aside>

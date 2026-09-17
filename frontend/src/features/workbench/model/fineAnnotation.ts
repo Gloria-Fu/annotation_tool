@@ -8,7 +8,7 @@ import {
 } from "../skillDefinitions";
 import { isSkillEnabled } from "../skillAvailability";
 import type { Segment } from "../../../shared/api/types";
-import { annotationHands, gripperIssues, handLabel } from "./gripperKeyframes";
+import { annotationHands, handLabel } from "./gripperKeyframes";
 import { failureReasonLabel } from "../failureReasons";
 import { invalidSegmentReasonLabel } from "../segmentValidity";
 
@@ -27,20 +27,20 @@ export function placeKeyframeFrame(
     ?.frame;
 }
 
-function validPlaceFrame(frame: number | undefined, start: number, end: number) {
+function validKeyframeFrame(frame: number | undefined, start: number, end: number) {
   return typeof frame === "number" && Number.isInteger(frame) && frame >= start && frame < end;
 }
 
-function placeKeyframeIssues(fine: FineAnnotation, start: number, end: number): string[] {
+function keyframeFrameIssues(fine: FineAnnotation, start: number, end: number): string[] {
   const hands = annotationHands(fine);
   if (hands.length > 1) {
     return hands.flatMap((hand) =>
-      validPlaceFrame(placeKeyframeFrame(fine, hand), start, end)
+      validKeyframeFrame(placeKeyframeFrame(fine, hand), start, end)
         ? []
         : [handLabel(hand) + "片段内关键帧帧号"],
     );
   }
-  return validPlaceFrame(placeKeyframeFrame(fine), start, end) ? [] : ["片段内关键帧帧号"];
+  return validKeyframeFrame(placeKeyframeFrame(fine), start, end) ? [] : ["片段内关键帧帧号"];
 }
 
 function effectiveSegmentValidity(fine: FineAnnotation): SegmentValidity {
@@ -134,9 +134,9 @@ export function templateIssues(segment: Segment): string[] {
   if (fine.outcome === "failure") {
     // Failure events can be submitted without an exact hand or jaw location.
   } else if (skill === "Pick") {
-    missing.push(...gripperIssues(fine, segment.start_frame, segment.end_frame));
+    missing.push(...keyframeFrameIssues(fine, segment.start_frame, segment.end_frame));
   } else if (skill === "Place") {
-    missing.push(...placeKeyframeIssues(fine, segment.start_frame, segment.end_frame));
+    missing.push(...keyframeFrameIssues(fine, segment.start_frame, segment.end_frame));
   } else if (!validPoint(fine.keyframe_point)) missing.push("片段内关键帧位置");
   return missing;
 }

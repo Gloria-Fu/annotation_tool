@@ -274,15 +274,15 @@ export const SKILL_DEFINITIONS: SkillDefinition[] = [
   {
     name: "Pick",
     label: "拾取",
-    keyframeDefinition: "物体被夹爪夹持住的瞬间",
-    requiredObjects: ["每只操作手夹持物体时的左夹和右夹位置；看不见也要估点并标为不可见"],
+    keyframeDefinition: "物体和夹爪刚好接触的瞬间；柔性物体选刚好接触且尚未形变的帧。",
+    requiredObjects: ["只标关键帧；单手标一个，双手分别标左右手"],
     tokens: tokens("Pick"),
   },
   {
     name: "Place",
     label: "放置",
-    keyframeDefinition: "夹爪完全张开的时刻；若边张开边移动，取移动前张开最大的帧。",
-    requiredObjects: ["只标关键帧；双手时分别标左右手，不标夹爪位置"],
+    keyframeDefinition: "夹爪刚好释放物体的瞬间。",
+    requiredObjects: ["只标关键帧；单手标一个，双手分别标左右手"],
     tokens: tokens("Place"),
   },
   {

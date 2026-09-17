@@ -22,6 +22,7 @@ import { statusLabels } from "../../shared/constants/labels";
 import { queryKeys } from "../../shared/queryKeys";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { datasetsApi } from "../datasets/api";
+import { qualityApi } from "../quality/api";
 import { taskPackagesApi, type PackageInput } from "./api";
 import { claimFailureMessage, claimFailureTitle } from "./claimFailure";
 
@@ -45,6 +46,18 @@ export function PackagesPage() {
     enabled: !!projectId,
   });
   const canManagePackages = user.role === "developer_admin" || user.role === "annotation_manager";
+  const { data: qualityBatches = [] } = useQuery({
+    queryKey: queryKeys.qualityBatches(projectId),
+    queryFn: () => qualityApi.batches(projectId as string),
+    enabled: !!projectId && canManagePackages,
+  });
+  const checkedQualityCountByPackage = qualityBatches.reduce<Record<string, number>>(
+    (counts, batch) => ({
+      ...counts,
+      [batch.package_id]: (counts[batch.package_id] || 0) + batch.checked_samples,
+    }),
+    {},
+  );
   const canViewPackageItems = canManagePackages || user.role === "outsourcing_manager";
   const { data: datasets = [] } = useQuery({
     queryKey: queryKeys.datasets(projectId),
@@ -167,8 +180,12 @@ export function PackagesPage() {
             },
             {
               title: "条目进度",
-              render: (_, row) =>
-                `总数 ${row.total_items} · 已领取 ${row.claimed_items} · 已标注 ${row.annotated_items} · 已审核 ${row.reviewed_items}`,
+              render: (_, row) => {
+                const baseProgress = `总数 ${row.total_items} · 已领取 ${row.claimed_items} · 已标注 ${row.annotated_items} · 已审核 ${row.reviewed_items}`;
+                return canManagePackages
+                  ? `${baseProgress} · 已抽检 ${checkedQualityCountByPackage[row.id] || 0}`
+                  : baseProgress;
+              },
             },
             {
               title: "访问范围",

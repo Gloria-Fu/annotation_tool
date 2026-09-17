@@ -317,23 +317,83 @@ it("only exposes the five supported skills with distinct outcomes", () => {
     expect(templateIssues(segment)).toEqual([]);
     expect(segment.text).not.toContain("【");
     expect(templateIssues({ ...segment, end_frame: 5 })).toContain(
-      skill.name === "Pick"
-        ? "左手片段内 HEAD 关键帧"
-        : skill.name === "Place"
-          ? "片段内关键帧帧号"
-          : "片段内关键帧位置",
+      skill.name === "Pick" || skill.name === "Place" ? "片段内关键帧帧号" : "片段内关键帧位置",
     );
     delete values.orientation;
     expect(templateIssues(segment)).toContain("相对姿态");
   }
 });
 
-it("defines the Place keyframe as the moment the gripper fully opens", () => {
+it("defines Pick and Place keyframes as frame-only events", () => {
+  const pick = SKILL_DEFINITIONS.find((skill) => skill.name === "Pick");
   const place = SKILL_DEFINITIONS.find((skill) => skill.name === "Place");
-  expect(place?.keyframeDefinition).toBe(
-    "夹爪完全张开的时刻；若边张开边移动，取移动前张开最大的帧。",
+  expect(pick?.keyframeDefinition).toBe(
+    "物体和夹爪刚好接触的瞬间；柔性物体选刚好接触且尚未形变的帧。",
   );
-  expect(place?.requiredObjects).toEqual(["只标关键帧；双手时分别标左右手，不标夹爪位置"]);
+  expect(pick?.requiredObjects).toEqual(["只标关键帧；单手标一个，双手分别标左右手"]);
+  expect(place?.keyframeDefinition).toBe("夹爪刚好释放物体的瞬间。");
+  expect(place?.requiredObjects).toEqual(["只标关键帧；单手标一个，双手分别标左右手"]);
+});
+
+it("validates Pick with only a keyframe frame and ignores jaw positions", () => {
+  const values = {
+    operator_hand: "右手",
+    initial_position: "托盘前侧",
+    initial_state: "张开",
+    object_location: "托盘中央",
+    object_name: "杯子",
+    orientation: "垂直",
+    gripper_action: "闭合",
+    contact_point: "杯沿",
+    lift_action: "无动作",
+  };
+  const fine: FineAnnotation = {
+    ...annotation,
+    skill: "Pick",
+    template_values: values,
+    keyframe_frame: 5,
+  };
+  const segment = {
+    id: "pick-frame",
+    start_frame: 0,
+    end_frame: 10,
+    text: fineAnnotationText(fine),
+    fine_annotation: fine,
+  };
+  expect(templateIssues(segment)).toEqual([]);
+  expect(
+    templateIssues({
+      ...segment,
+      fine_annotation: { ...fine, keyframe_frame: undefined },
+    }),
+  ).toContain("片段内关键帧帧号");
+  expect(
+    templateIssues({
+      ...segment,
+      fine_annotation: {
+        ...fine,
+        keyframe_frame: undefined,
+        gripper_keyframes: {
+          right: {
+            frame: 5,
+            view: "head",
+            left: { visibility: "visible", x: 0.2, y: 0.4 },
+            right: { visibility: "visible", x: 0.3, y: 0.4 },
+          },
+        },
+      },
+    }),
+  ).toEqual([]);
+  expect(
+    templateIssues({
+      ...segment,
+      fine_annotation: {
+        ...fine,
+        keyframe_frame: undefined,
+        keyframe_point: { frame: 5, view: "head", x: 0.5, y: 0.5 },
+      },
+    }),
+  ).toContain("片段内关键帧帧号");
 });
 
 it("requires Pick and Place tail action from two explicit options", () => {
@@ -810,7 +870,7 @@ it("requires Place tail action and omits the tail sentence when no action is sel
   ).toContain("张开夹爪，物体最终位于托盘中央。右手夹爪向上抬起。");
 });
 
-it("does not infer hand ownership from legacy Pick points", () => {
+it("does not use legacy Pick point coordinates as keyframe frames", () => {
   const left = { frame: 5, view: "head", x: 0.3, y: 0.5 };
   const right = { ...left, x: 0.7 };
   const issues = (points?: FineAnnotation["keyframe_points"]) =>
@@ -826,8 +886,8 @@ it("does not infer hand ownership from legacy Pick points", () => {
         keyframe_points: points,
       },
     });
-  expect(issues()).toContain("左手关键帧标记");
-  expect(issues({ left, right })).toContain("左手关键帧标记");
+  expect(issues()).toContain("片段内关键帧帧号");
+  expect(issues({ left, right })).toContain("片段内关键帧帧号");
 });
 
 it("renders structured Pick failure reasons without claiming success", () => {
