@@ -3,7 +3,7 @@ from hashlib import sha256
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.permissions import ensure_project_access
@@ -41,10 +41,17 @@ class SamplingCandidate:
 
 
 def _eligible_items(db: Session, package_id: str, only_unchecked: bool) -> list[SamplingCandidate]:
+    sampled_item_ids = select(QualitySample.task_item_id)
+    rejected_item_ids = select(QualityCheck.task_item_id).where(
+        QualityCheck.result == QaStatus.REJECTED
+    )
     statement = select(TaskItem).where(
         TaskItem.package_id == package_id,
         TaskItem.status == ItemStatus.COMPLETED,
-        ~TaskItem.id.in_(select(QualitySample.task_item_id)),
+        or_(
+            ~TaskItem.id.in_(sampled_item_ids),
+            and_(TaskItem.qa_status == QaStatus.UNCHECKED, TaskItem.id.in_(rejected_item_ids)),
+        ),
     )
     if only_unchecked:
         statement = statement.where(TaskItem.qa_status == QaStatus.UNCHECKED)
