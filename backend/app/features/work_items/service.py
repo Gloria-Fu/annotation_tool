@@ -126,7 +126,12 @@ def initial_segments(episode: DatasetEpisode, fps: float) -> dict[str, Any]:
     return {"schema_version": "segments.v1", "segments": segments}
 
 
-def validate_segments(payload: RevisionInput, length: int, require_text: bool = False) -> None:
+def validate_segments(
+    payload: RevisionInput,
+    length: int,
+    require_text: bool = False,
+    require_complete: bool = False,
+) -> None:
     if payload.schema_version != "segments.v1":
         raise HTTPException(status_code=422, detail="仅支持 segments.v1 标注格式")
     segments = payload.payload.get("segments")
@@ -134,19 +139,24 @@ def validate_segments(payload: RevisionInput, length: int, require_text: bool = 
         raise HTTPException(status_code=422, detail="payload.segments 必须是数组")
     if any(not isinstance(segment, dict) for segment in segments):
         raise HTTPException(status_code=422, detail="每个片段必须是对象")
-    previous_end = -1
-    for segment in sorted(segments, key=lambda item: item.get("start_frame", -1)):
+    ordered_segments = sorted(segments, key=lambda item: item.get("start_frame", -1))
+    previous_end = 0 if require_complete else -1
+    for segment in ordered_segments:
         try:
             start, end = int(segment["start_frame"]), int(segment["end_frame"])
         except (KeyError, TypeError, ValueError) as exc:
             raise HTTPException(status_code=422, detail="片段必须包含整数帧范围") from exc
         if start < 0 or end > length or start >= end or start < previous_end:
             raise HTTPException(status_code=422, detail="片段帧范围非法或存在重叠")
+        if require_complete and start != previous_end:
+            raise HTTPException(status_code=422, detail="提交审核时片段必须连续覆盖完整视频")
         if require_text and not str(segment.get("text", "")).strip():
             raise HTTPException(status_code=422, detail="提交审核时每个片段都必须填写文字")
         previous_end = end
     if require_text and not segments:
         raise HTTPException(status_code=422, detail="至少需要一个标注片段")
+    if require_complete and (not ordered_segments or previous_end != length):
+        raise HTTPException(status_code=422, detail="提交审核时片段必须连续覆盖完整视频")
 
 
 def revision_document(
@@ -315,7 +325,7 @@ def save_draft(item_id: str, payload: RevisionInput, user: User, db: Session) ->
 def submit_annotation(item_id: str, payload: RevisionInput, user: User, db: Session) -> TaskItem:
     item, _, episode, dataset = item_access(db, item_id, user)
     _ensure_can_edit(item, user, "提交")
-    validate_segments(payload, episode.length, require_text=True)
+    validate_segments(payload, episode.length, require_text=True, require_complete=True)
     previous = latest_revision(db, item.id)
     if payload.base_revision_id and (not previous or payload.base_revision_id != previous.id):
         raise HTTPException(status_code=409, detail="标注已被其他操作更新，请重新加载")
@@ -359,7 +369,12 @@ def review_item(item_id: str, payload: ReviewInput, user: User, db: Session) -> 
     previous = latest_revision(db, item.id)
     review_data = payload.payload or (previous.payload if previous else {"segments": []})
     review_payload = RevisionInput(schema_version="segments.v1", payload=review_data)
-    validate_segments(review_payload, episode.length, require_text=payload.decision == "approve")
+    validate_segments(
+        review_payload,
+        episode.length,
+        require_text=payload.decision == "approve",
+        require_complete=payload.decision == "approve",
+    )
     version = previous.version + 1 if previous else 1
     try:
         if payload.decision == "approve":

@@ -21,6 +21,39 @@ def test_submit_rejects_blank_text():
     assert error.value.status_code == 422
 
 
+def test_completed_segments_must_cover_full_video():
+    with pytest.raises(HTTPException) as error:
+        validate_segments(
+            RevisionInput(
+                payload={
+                    "segments": [
+                        {"start_frame": 0, "end_frame": 3, "text": "a"},
+                        {"start_frame": 5, "end_frame": 10, "text": "b"},
+                    ]
+                }
+            ),
+            length=10,
+            require_text=True,
+            require_complete=True,
+        )
+    assert error.value.status_code == 422
+    assert "连续覆盖完整视频" in error.value.detail
+
+
+def test_draft_segments_may_have_temporary_gaps():
+    validate_segments(
+        RevisionInput(
+            payload={
+                "segments": [
+                    {"start_frame": 0, "end_frame": 3, "text": "a"},
+                    {"start_frame": 5, "end_frame": 10, "text": "b"},
+                ]
+            }
+        ),
+        length=10,
+    )
+
+
 def test_segment_ranges_must_not_overlap():
     with pytest.raises(HTTPException) as error:
         validate_segments(
