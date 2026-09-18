@@ -6,6 +6,7 @@ import {
   durationSeconds,
   formatFrameTime,
   frameToPercent,
+  uncoveredFrameRanges,
 } from "./timelineMath";
 
 describe("timelineMath", () => {
@@ -35,5 +36,21 @@ describe("timelineMath", () => {
         10,
       ),
     ).toEqual({ min: 1, max: 7 });
+  });
+
+  it("finds timeline ranges that are not covered by segments", () => {
+    expect(
+      uncoveredFrameRanges(
+        [
+          { start_frame: 5, end_frame: 10 },
+          { start_frame: 0, end_frame: 3 },
+          { start_frame: 8, end_frame: 12 },
+        ],
+        15,
+      ),
+    ).toEqual([
+      { start_frame: 3, end_frame: 5 },
+      { start_frame: 12, end_frame: 15 },
+    ]);
   });
 });

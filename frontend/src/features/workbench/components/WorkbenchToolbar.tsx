@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eraser,
+  Flag,
   Merge,
   Pause,
   Play,
@@ -37,8 +38,11 @@ export function WorkbenchToolbar({
   onPreviousSegment,
   onNextSegment,
   onMerge,
+  onRecordIssue,
   canMergePrevious,
   canMergeNext,
+  issueCount,
+  canRecordIssue,
   readOnly,
 }: {
   currentFrame: number;
@@ -62,8 +66,11 @@ export function WorkbenchToolbar({
   onPreviousSegment: () => void;
   onNextSegment: () => void;
   onMerge: (direction: "previous" | "next") => void;
+  onRecordIssue?: () => void;
   canMergePrevious: boolean;
   canMergeNext: boolean;
+  issueCount?: number;
+  canRecordIssue?: boolean;
   readOnly?: boolean;
 }) {
   return (
@@ -171,6 +178,16 @@ export function WorkbenchToolbar({
       />
       <Button icon={<Undo2 size={15} />} disabled={!canUndo} onClick={onUndo} title="撤销" />
       <Button icon={<Redo2 size={15} />} disabled={!canRedo} onClick={onRedo} title="重做" />
+      {onRecordIssue && (
+        <Button
+          icon={<Flag size={15} />}
+          disabled={!canRecordIssue}
+          onClick={onRecordIssue}
+          title="记录当前帧和片段的问题"
+        >
+          {issueCount ? `记录问题 (${issueCount})` : "记录问题"}
+        </Button>
+      )}
       <Typography.Text type="secondary">
         {formatFrameTime(currentFrame, fps, displayTimeScale)} /{" "}
         {formatFrameTime(length, fps, displayTimeScale)}

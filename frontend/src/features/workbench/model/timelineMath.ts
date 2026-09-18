@@ -7,6 +7,24 @@ export function frameToPercent(frame: number, length: number) {
   return (clampFrame(frame, length) / length) * 100;
 }
 
+export function uncoveredFrameRanges(
+  segments: { start_frame: number; end_frame: number }[],
+  length: number,
+) {
+  const ranges: { start_frame: number; end_frame: number }[] = [];
+  if (length <= 0) return ranges;
+  let coveredUntil = 0;
+  for (const segment of [...segments].sort((left, right) => left.start_frame - right.start_frame)) {
+    const start = clampFrame(segment.start_frame, length);
+    const end = clampFrame(segment.end_frame, length);
+    if (end <= start) continue;
+    if (start > coveredUntil) ranges.push({ start_frame: coveredUntil, end_frame: start });
+    coveredUntil = Math.max(coveredUntil, end);
+  }
+  if (coveredUntil < length) ranges.push({ start_frame: coveredUntil, end_frame: length });
+  return ranges;
+}
+
 export function durationSeconds(
   startFrame: number,
   endFrame: number,

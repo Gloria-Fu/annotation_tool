@@ -707,6 +707,27 @@ body {
   white-space: nowrap;
   cursor: pointer;
 }
+.timeline-gap {
+  position: absolute;
+  top: 11px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 2px dashed #d6a34a;
+  border-radius: 4px;
+  color: #7a5517;
+  background: #fff7df;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.timeline-gap span {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
 .timeline-segment.active {
   border-color: #f0bd52;
   box-shadow: 0 0 0 2px rgba(240, 189, 82, 0.28);
@@ -828,6 +849,54 @@ body {
   background: #f4f8f6;
   color: #52625c;
   font-variant-numeric: tabular-nums;
+}
+.issue-record-panel {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid #d8e2de;
+  background: #f8fbfa;
+}
+.issue-record-heading > div {
+  display: grid;
+  gap: 3px;
+}
+.issue-record-heading .ant-typography-secondary {
+  font-size: 12px;
+}
+.issue-record-list {
+  display: grid;
+  gap: 8px;
+}
+.issue-record-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e0e8e4;
+  background: #fff;
+}
+.issue-record-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.issue-record-main p {
+  margin: 0;
+  color: #25332f;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.issue-record-form {
+  display: grid;
+  gap: 14px;
+}
+.issue-record-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 .assignee-cell {
   display: inline-flex;
@@ -1140,6 +1209,9 @@ body {
     flex-direction: column;
   }
   .failure-fields {
+    grid-template-columns: 1fr;
+  }
+  .issue-record-form-grid {
     grid-template-columns: 1fr;
   }
   .sentence-attributes {

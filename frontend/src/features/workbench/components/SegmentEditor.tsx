@@ -30,6 +30,14 @@ import {
 import { isSkillEnabled, SKILL_OPTIONS } from "../skillAvailability";
 import { FAILURE_REASON_OPTIONS, failureReasonLabel } from "../failureReasons";
 import { INVALID_SEGMENT_REASON_OPTIONS, SEGMENT_VALIDITY_OPTIONS } from "../segmentValidity";
+import {
+  formatIssueRecord,
+  issueSeverityLabel,
+  issueSourceLabel,
+  issueTypeLabel,
+  type WorkIssueRecord,
+  type WorkIssueSource,
+} from "../model/issueRecords";
 
 export function SegmentEditor({
   selected,
@@ -54,6 +62,10 @@ export function SegmentEditor({
   canCreateRetry,
   reviewReason,
   qualityReason,
+  issueMode,
+  issueRecords = [],
+  onJumpIssue,
+  onRemoveIssue,
   readOnly,
 }: {
   selected?: Segment;
@@ -88,6 +100,10 @@ export function SegmentEditor({
   canCreateRetry: boolean;
   reviewReason?: string | null;
   qualityReason?: string | null;
+  issueMode?: WorkIssueSource;
+  issueRecords?: WorkIssueRecord[];
+  onJumpIssue?: (issue: WorkIssueRecord) => void;
+  onRemoveIssue?: (issueId: string) => void;
   readOnly?: boolean;
 }) {
   const [reviewComment, setReviewComment] = useState("");
@@ -278,6 +294,54 @@ export function SegmentEditor({
           <Typography.Paragraph type="warning">待填写：{issues.join("、")}</Typography.Paragraph>
         )}
       </section>
+      {issueMode && (
+        <section className="issue-record-panel" aria-label="问题记录">
+          <div className="issue-record-heading">
+            <div>
+              <Typography.Text strong>{issueSourceLabel(issueMode)}问题记录</Typography.Text>
+              <Typography.Text type="secondary">
+                已记录 {issueRecords.length} 个问题，退回时会自动附在原因中。
+              </Typography.Text>
+            </div>
+          </div>
+          {issueRecords.length ? (
+            <div className="issue-record-list">
+              {issueRecords.map((issue) => (
+                <div className="issue-record-item" key={issue.id}>
+                  <div className="issue-record-main">
+                    <Space size={5} wrap>
+                      <Tag color={issue.severity === "critical" ? "red" : "orange"}>
+                        {issueSeverityLabel(issue.severity)}
+                      </Tag>
+                      <Tag>{issueTypeLabel(issue.issue_type)}</Tag>
+                      <Typography.Text type="secondary">
+                        {issue.segment_label} · 帧 {issue.frame}
+                      </Typography.Text>
+                    </Space>
+                    <Typography.Paragraph>{issue.comment}</Typography.Paragraph>
+                  </div>
+                  <Space size="small">
+                    {onJumpIssue && (
+                      <Button size="small" onClick={() => onJumpIssue(issue)}>
+                        跳转
+                      </Button>
+                    )}
+                    {onRemoveIssue && (
+                      <Button size="small" danger onClick={() => onRemoveIssue(issue.id)}>
+                        删除
+                      </Button>
+                    )}
+                  </Space>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Typography.Text type="secondary">
+              暂无已记录问题。播放时点击下方“记录问题”会自动带上当前段和帧号。
+            </Typography.Text>
+          )}
+        </section>
+      )}
       <div className="editor-fields">
         <div className="segment-meta">
           {formatFrameTime(selected.start_frame, fps, displayTimeScale)} -{" "}
@@ -787,18 +851,27 @@ export function SegmentEditor({
         title="填写退回原因"
         okText="确认退回"
         cancelText="取消"
-        okButtonProps={{ disabled: !reviewComment.trim() }}
+        okButtonProps={{ disabled: !reviewComment.trim() && issueRecords.length === 0 }}
         onCancel={() => setReviewModalOpen(false)}
         onOk={() => {
           onReview("request_changes", reviewComment.trim());
           setReviewModalOpen(false);
         }}
       >
+        {issueRecords.length > 0 && (
+          <Typography.Paragraph type="secondary">
+            已记录 {issueRecords.length} 个问题，将随退回原因一起提交。
+          </Typography.Paragraph>
+        )}
         <Input.TextArea
           rows={4}
           value={reviewComment}
           onChange={(event) => setReviewComment(event.target.value)}
-          placeholder="请填写需要修改的具体原因"
+          placeholder={
+            issueRecords.length
+              ? `可补充总说明；问题清单已自动记录。\n${formatIssueRecord(issueRecords[0])}`
+              : "请填写需要修改的具体原因"
+          }
         />
       </Modal>
       <Modal
@@ -806,22 +879,34 @@ export function SegmentEditor({
         title="填写抽检退回原因"
         okText="确认退回"
         cancelText="取消"
-        okButtonProps={{ danger: true, disabled: !qualityComment.trim() }}
+        okButtonProps={{
+          danger: true,
+          disabled: !qualityComment.trim() && issueRecords.length === 0,
+        }}
         confirmLoading={qualityCheck?.loading}
         onCancel={() => {
           if (!qualityCheck?.loading) setQualityModalOpen(false);
         }}
         onOk={() => {
-          if (!qualityComment.trim()) return;
+          if (!qualityComment.trim() && issueRecords.length === 0) return;
           qualityCheck?.onReject(qualityComment.trim());
           setQualityModalOpen(false);
         }}
       >
+        {issueRecords.length > 0 && (
+          <Typography.Paragraph type="secondary">
+            已记录 {issueRecords.length} 个问题，将随抽检退回原因一起提交。
+          </Typography.Paragraph>
+        )}
         <Input.TextArea
           rows={4}
           value={qualityComment}
           onChange={(event) => setQualityComment(event.target.value)}
-          placeholder="请说明需要返工的问题"
+          placeholder={
+            issueRecords.length
+              ? `可补充总说明；问题清单已自动记录。\n${formatIssueRecord(issueRecords[0])}`
+              : "请说明需要返工的问题"
+          }
         />
       </Modal>
     </aside>

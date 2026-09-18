@@ -48,7 +48,8 @@ describe("fineAnnotationText", () => {
     const values = fine.template_values ?? {};
     expect(values.initial_state).toBe("张开");
     expect(values.gripper_action).toBe("闭合");
-    expect(fineAnnotationText(fine)).toContain("【操作手】夹爪初始位于【夹爪初始位置】");
+    expect(fineAnnotationText(fine)).toContain("【操作手】夹爪初始状态为张开");
+    expect(fineAnnotationText(fine)).not.toContain("夹爪初始位置");
     expect(fineAnnotationText(fine)).not.toContain(segment.text);
     expect(fineAnnotationText(annotation)).not.toContain("黄瓜");
     expect(templateIssues(segment)).toContain("操作手");
@@ -177,7 +178,7 @@ describe("fineAnnotationPreview", () => {
       },
     });
     expect(parts).toContainEqual({ text: "【左手】", kind: "filled" });
-    expect(parts).toContainEqual({ text: "【货架前侧】", kind: "filled" });
+    expect(parts).not.toContainEqual({ text: "【货架前侧】", kind: "filled" });
     expect(parts).toContainEqual({ text: "【杯子】", kind: "filled" });
     expect(parts).toContainEqual({ text: "【张开】", kind: "filled" });
     expect(parts).toContainEqual({ text: "【闭合】", kind: "filled" });
@@ -398,9 +399,13 @@ it("validates Pick with only a keyframe frame and ignores jaw positions", () => 
 
 it("requires Pick and Place tail action from two explicit options", () => {
   for (const skill of ["Pick", "Place"]) {
+    const keys = sentenceTokens(skill, {}).flatMap((token) =>
+      typeof token === "string" ? [] : [token.key],
+    );
     const tailAction = sentenceTokens(skill, {}).find(
       (token) => typeof token !== "string" && token.key === "lift_action",
     );
+    expect(keys).not.toContain("initial_position");
     expect(tailAction).toMatchObject({
       label: "收尾动作和状态",
       options: ["向上抬起", "无动作", "其他"],

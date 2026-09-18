@@ -86,13 +86,17 @@ const contact: SentenceToken[] = [
   "夹爪，",
 ];
 function tokens(name: SkillName): SentenceToken[] {
-  const start: SentenceToken[] = [
-    field("operator_hand", "操作手", "选择操作手", ["左手", "右手", "双手"]),
-    "夹爪初始位于",
-    field("initial_position", "夹爪初始位置", "如：餐桌右侧边缘外侧"),
-    "，状态为",
-    field("initial_state", "初始夹爪状态", "选择状态", states),
-  ];
+  const operatorHand = field("operator_hand", "操作手", "选择操作手", ["左手", "右手", "双手"]);
+  const start: SentenceToken[] =
+    name === "Pick" || name === "Place"
+      ? [operatorHand, "夹爪初始状态为", field("initial_state", "初始夹爪状态", "选择状态", states)]
+      : [
+          operatorHand,
+          "夹爪初始位于",
+          field("initial_position", "夹爪初始位置", "如：餐桌右侧边缘外侧"),
+          "，状态为",
+          field("initial_state", "初始夹爪状态", "选择状态", states),
+        ];
   if (name === "Place")
     return [
       ...start,
@@ -174,9 +178,7 @@ function tokens(name: SkillName): SentenceToken[] {
 function separateObjectStart(): SentenceToken[] {
   return [
     field("operator_hand", "操作手", "选择操作手", ["左手", "右手", "双手"]),
-    "夹爪初始位于",
-    field("initial_position", "夹爪初始位置", "如：餐桌右侧边缘外侧"),
-    "，左手状态为",
+    "夹爪初始状态为",
     field("initial_state_left", "左手初始夹爪状态", "选择状态", states),
     "、右手状态为",
     field("initial_state_right", "右手初始夹爪状态", "选择状态", states),

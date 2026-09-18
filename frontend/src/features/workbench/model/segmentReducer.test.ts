@@ -139,4 +139,23 @@ describe("segmentReducer", () => {
     const redone = segmentReducer(undone, { type: "redo" });
     expect(redone.segments).toEqual(cleared.segments);
   });
+
+  it("resets segments without carrying undo history across tasks", () => {
+    const dirty = segmentReducer(createWorkbenchState(segments), {
+      type: "split",
+      id: "one",
+      frame: 3,
+      newId: "one-split",
+    });
+    const reset = segmentReducer(dirty, {
+      type: "reset",
+      segments: [{ id: "other", start_frame: 0, end_frame: 8, text: "other task" }],
+    });
+
+    expect(reset.segments).toEqual([
+      { id: "other", start_frame: 0, end_frame: 8, text: "other task" },
+    ]);
+    expect(reset.past).toEqual([]);
+    expect(segmentReducer(reset, { type: "undo" })).toBe(reset);
+  });
 });

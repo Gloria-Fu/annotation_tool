@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Modal, Typography, message } from "antd";
+import { Input, Modal, Select, Space, Tag, Typography, message } from "antd";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useShell } from "../../app/shellContext";
@@ -23,10 +23,31 @@ import { useAutosave } from "./hooks/useAutosave";
 import { useVideoSync } from "./hooks/useVideoSync";
 import { canAnnotateItem, canReviewItem, isWorkbenchReadOnly } from "./workPermissions";
 import { createBlankSegment, createWorkbenchState, segmentReducer } from "./model/segmentReducer";
-import { displaySeconds, formatFrameTime } from "./model/timelineMath";
+import { displaySeconds, formatFrameTime, uncoveredFrameRanges } from "./model/timelineMath";
 import { currentFineAnnotation, fineAnnotationText, templateIssues } from "./model/fineAnnotation";
 import { isSkillEnabled } from "./skillAvailability";
 import { GripperMarkModal, type GripperMarkSession } from "./components/GripperMarkModal";
+import {
+  WORK_ISSUE_SEVERITY_OPTIONS,
+  WORK_ISSUE_TYPE_OPTIONS,
+  composeReturnComment,
+  issueAnchorLabel,
+  issueSourceLabel,
+  parseIssueRecords,
+  type WorkIssueRecord,
+  type WorkIssueSeverity,
+  type WorkIssueSource,
+  type WorkIssueType,
+} from "./model/issueRecords";
+
+type IssueDraft = Omit<
+  WorkIssueRecord,
+  "id" | "issue_type" | "severity" | "comment" | "created_at"
+> & {
+  issue_type: WorkIssueType;
+  severity: WorkIssueSeverity;
+  comment: string;
+};
 
 function assigneeLabel(person: WorkContext["annotator"]) {
   if (!person) return "";
@@ -67,6 +88,20 @@ function nextPendingQualitySample(
   );
 }
 
+function issueStorageKey(itemId: string, source: WorkIssueSource, batchId?: string) {
+  return `workbench-issues:${itemId}:${source}:${
+    source === "quality" ? batchId || "quality" : "review"
+  }`;
+}
+
+function loadStoredIssues(key: string) {
+  try {
+    return parseIssueRecords(window.localStorage.getItem(key));
+  } catch {
+    return [];
+  }
+}
+
 export function WorkbenchPage() {
   const { itemId = "" } = useParams();
   const { user } = useShell();
@@ -82,12 +117,17 @@ export function WorkbenchPage() {
   const [revision, setRevision] = useState<WorkContext["latest_revision"]>(null);
   const [reviewSaveError, setReviewSaveError] = useState<string | null>(null);
   const [reviewDraftSaved, setReviewDraftSaved] = useState(false);
-  const initialized = useRef(false);
+  const initializedItemId = useRef<string | undefined>(undefined);
   const pointMarkedCallback = useRef<
     ((point: NonNullable<FineAnnotation["keyframe_point"]>) => void) | undefined
   >(undefined);
   const [pointMarking, setPointMarking] = useState(false);
   const [gripperSession, setGripperSession] = useState<GripperMarkSession>();
+  const [savedIssueRecords, setSavedIssueRecords] = useState<{
+    key: string;
+    records: WorkIssueRecord[];
+  }>({ key: "", records: [] });
+  const [issueDraft, setIssueDraft] = useState<IssueDraft | null>(null);
   const { data: context } = useQuery({
     queryKey: queryKeys.workContext(itemId),
     queryFn: () => workbenchApi.context(itemId),
@@ -102,13 +142,21 @@ export function WorkbenchPage() {
   });
 
   useEffect(() => {
-    if (!context || initialized.current) return;
+    if (!context || initializedItemId.current === context.item.id) return;
     const segments = initialSegments(context);
-    dispatch({ type: "replace", segments });
+    dispatch({ type: "reset", segments });
     setSelectedId(segments[0]?.id);
     setRevision(context.latest_revision);
-    initialized.current = true;
-  }, [context]);
+    setDirty(false);
+    setClearOpen(false);
+    setReviewSaveError(null);
+    setReviewDraftSaved(false);
+    pointMarkedCallback.current = undefined;
+    setPointMarking(false);
+    setGripperSession(undefined);
+    setIssueDraft(null);
+    initializedItemId.current = context.item.id;
+  }, [context, setPointMarking]);
 
   const fps = Number(context?.fps || 30);
   const length = context?.length || 0;
@@ -121,6 +169,26 @@ export function WorkbenchPage() {
   const reviewing = context ? canReviewItem(context.item, user.id) : false;
   const readOnly = context ? isWorkbenchReadOnly(context.item, user) : true;
   const qualitySample = qualityBatch?.samples.find((sample) => sample.task_item_id === itemId);
+  const canRecordQualityIssue = Boolean(
+    qualitySelection.batchId &&
+    qualitySample &&
+    qualityBatch &&
+    !qualitySample.latest_check &&
+    qualityBatch.status === "open",
+  );
+  const issueMode: WorkIssueSource | undefined = reviewing
+    ? "review"
+    : canRecordQualityIssue
+      ? "quality"
+      : undefined;
+  const activeIssueStorageKey = issueMode
+    ? issueStorageKey(itemId, issueMode, qualitySelection.batchId)
+    : "";
+  const issueRecords = useMemo(() => {
+    if (!activeIssueStorageKey) return [];
+    if (savedIssueRecords.key === activeIssueStorageKey) return savedIssueRecords.records;
+    return loadStoredIssues(activeIssueStorageKey);
+  }, [activeIssueStorageKey, savedIssueRecords]);
   const nextQualitySample = qualityBatch
     ? nextPendingQualitySample(qualityBatch.samples, itemId)
     : undefined;
@@ -135,6 +203,26 @@ export function WorkbenchPage() {
     }
     void navigate(-1);
   }, [navigate, qualityReturnPath, qualitySelection.batchId]);
+  const saveIssueRecords = useCallback(
+    (records: WorkIssueRecord[]) => {
+      if (!activeIssueStorageKey) {
+        setSavedIssueRecords({ key: "", records: [] });
+        return;
+      }
+      setSavedIssueRecords({ key: activeIssueStorageKey, records });
+      try {
+        if (records.length) {
+          window.localStorage.setItem(activeIssueStorageKey, JSON.stringify(records));
+        } else {
+          window.localStorage.removeItem(activeIssueStorageKey);
+        }
+      } catch {
+        // Losing a local issue draft should not block the review workflow.
+      }
+    },
+    [activeIssueStorageKey, setSavedIssueRecords],
+  );
+  const clearIssueRecords = useCallback(() => saveIssueRecords([]), [saveIssueRecords]);
   const autosave = useAutosave({
     itemId,
     segments: state.segments,
@@ -208,10 +296,12 @@ export function WorkbenchPage() {
     }) =>
       workbenchApi.review(itemId, {
         decision,
-        comment,
+        comment:
+          decision === "request_changes" ? composeReturnComment(comment, issueRecords) : comment,
         payload: { schema_version: "segments.v1", segments: state.segments },
       }),
     onSuccess: () => {
+      clearIssueRecords();
       message.success("审核操作成功");
       void queryClient.invalidateQueries({ queryKey: queryKeys.myTasksRoot(true) });
       void navigate(-1);
@@ -220,8 +310,14 @@ export function WorkbenchPage() {
   });
   const qualityCheck = useMutation({
     mutationFn: ({ result, comment }: { result: "passed" | "rejected"; comment?: string }) =>
-      qualityApi.check(qualitySelection.batchId as string, itemId, result, comment),
+      qualityApi.check(
+        qualitySelection.batchId as string,
+        itemId,
+        result,
+        result === "rejected" ? composeReturnComment(comment, issueRecords) : comment,
+      ),
     onSuccess: (_, variables) => {
+      clearIssueRecords();
       message.success(variables.result === "passed" ? "抽检通过已记录" : "抽检退回已记录");
       if (qualitySelection.batchId) {
         void queryClient.invalidateQueries({
@@ -252,6 +348,72 @@ export function WorkbenchPage() {
     setReviewDraftSaved(false);
     setReviewSaveError(null);
   }, [readOnly, setDirty, setReviewDraftSaved, setReviewSaveError]);
+  const openIssueRecorder = useCallback(() => {
+    if (!issueMode) {
+      message.info("只有审核或抽检时可以记录问题");
+      return;
+    }
+    const frame = videoSync.currentFrame;
+    const targetSegment =
+      state.segments.find((segment) => frame >= segment.start_frame && frame < segment.end_frame) ||
+      selected;
+    if (!targetSegment) {
+      message.info("请先选择或定位到一个标注段");
+      return;
+    }
+    const segmentIndex = state.segments.findIndex((segment) => segment.id === targetSegment.id) + 1;
+    const fine = currentFineAnnotation(targetSegment);
+    const skill = fine.skill || targetSegment.skill || "";
+    videoSync.pauseAll();
+    setIssueDraft({
+      source: issueMode,
+      segment_id: targetSegment.id,
+      segment_index: Math.max(segmentIndex, 1),
+      segment_label: issueAnchorLabel(Math.max(segmentIndex, 1), skill),
+      skill,
+      frame,
+      time_seconds: displaySeconds(frame, fps, previewTimeScale),
+      issue_type: "keyframe_error",
+      severity: "major",
+      comment: "",
+    });
+  }, [fps, issueMode, previewTimeScale, selected, setIssueDraft, state.segments, videoSync]);
+  const saveIssueDraft = useCallback(() => {
+    if (!issueDraft || !issueDraft.comment.trim()) return;
+    const record: WorkIssueRecord = {
+      ...issueDraft,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      comment: issueDraft.comment.trim(),
+      created_at: new Date().toISOString(),
+    };
+    saveIssueRecords([...issueRecords, record]);
+    setIssueDraft(null);
+    message.success("问题已记录");
+  }, [issueDraft, issueRecords, saveIssueRecords, setIssueDraft]);
+  const removeIssueRecord = useCallback(
+    (issueId: string) => {
+      saveIssueRecords(issueRecords.filter((issue) => issue.id !== issueId));
+    },
+    [issueRecords, saveIssueRecords],
+  );
+  const jumpToIssue = useCallback(
+    (issue: WorkIssueRecord) => {
+      const targetSegment = state.segments.find((segment) => segment.id === issue.segment_id);
+      if (targetSegment) setSelectedId(targetSegment.id);
+      videoSync.pauseAtFrame(issue.frame);
+    },
+    [setSelectedId, state.segments, videoSync],
+  );
+  const handleReview = useCallback(
+    (decision: "approve" | "request_changes", comment?: string) => {
+      if (decision === "approve" && issueMode === "review" && issueRecords.length > 0) {
+        message.warning("已记录问题，请删除问题后再审核通过，或执行退回修改");
+        return;
+      }
+      review.mutate({ decision, comment });
+    },
+    [issueMode, issueRecords.length, review],
+  );
 
   const onFineChange = useCallback(
     (fine_annotation: FineAnnotation, text: string) => {
@@ -389,7 +551,9 @@ export function WorkbenchPage() {
   }, [split, gripperSession, nudgeFrame]);
 
   if (!context) return null;
+  const hasUncoveredFrames = uncoveredFrameRanges(state.segments, context.length).length > 0;
   const submitDisabled =
+    hasUncoveredFrames ||
     !state.segments.length ||
     state.segments.some(
       (segment) =>
@@ -500,6 +664,9 @@ export function WorkbenchPage() {
               state.segments.findIndex((segment) => segment.id === selected.id) <
                 state.segments.length - 1
             }
+            onRecordIssue={issueMode ? openIssueRecorder : undefined}
+            issueCount={issueRecords.length}
+            canRecordIssue={!!issueMode}
             readOnly={readOnly}
           />
           <Timeline
@@ -520,6 +687,7 @@ export function WorkbenchPage() {
           />
         </section>
         <SegmentEditor
+          key={itemId}
           selected={selected}
           reviewing={reviewing}
           fps={fps}
@@ -587,7 +755,7 @@ export function WorkbenchPage() {
           onCreateRetry={createRetry}
           onSave={() => (reviewing ? saveReviewDraft.mutate() : saveDraft.mutate())}
           onSubmit={() => submit.mutate()}
-          onReview={(decision, comment) => review.mutate({ decision, comment })}
+          onReview={handleReview}
           qualityCheck={
             qualitySelection.batchId && qualitySample && qualityBatch
               ? {
@@ -596,7 +764,17 @@ export function WorkbenchPage() {
                     : undefined,
                   canCheck: !qualitySample.latest_check && qualityBatch.status === "open",
                   loading: qualityCheck.isPending,
-                  onPass: () => qualityCheck.mutate({ result: "passed" }),
+                  onPass: () => {
+                    if (hasUncoveredFrames) {
+                      message.warning("存在未覆盖片段，请抽检退回");
+                      return;
+                    }
+                    if (issueRecords.length > 0) {
+                      message.warning("已记录问题，请删除问题后再抽检通过，或执行抽检退回");
+                      return;
+                    }
+                    qualityCheck.mutate({ result: "passed" });
+                  },
                   onReject: (comment) => qualityCheck.mutate({ result: "rejected", comment }),
                   onNext: nextQualitySample ? goNextQualitySample : undefined,
                 }
@@ -608,12 +786,75 @@ export function WorkbenchPage() {
           canCreateRetry={canCreateRetry}
           reviewReason={context.review_comment}
           qualityReason={context.quality_comment}
+          issueMode={issueMode}
+          issueRecords={issueRecords}
+          onJumpIssue={jumpToIssue}
+          onRemoveIssue={removeIssueRecord}
           readOnly={readOnly}
         />
       </div>
       {gripperSession && (
         <GripperMarkModal session={gripperSession} onClose={() => setGripperSession(undefined)} />
       )}
+      <Modal
+        open={!!issueDraft}
+        title="记录问题"
+        okText="保存问题"
+        cancelText="取消"
+        okButtonProps={{ disabled: !issueDraft?.comment.trim() }}
+        onCancel={() => setIssueDraft(null)}
+        onOk={saveIssueDraft}
+      >
+        {issueDraft && (
+          <div className="issue-record-form">
+            <Space size={6} wrap>
+              <Tag color={issueDraft.source === "quality" ? "purple" : "gold"}>
+                {issueSourceLabel(issueDraft.source)}
+              </Tag>
+              <Tag>{issueDraft.segment_label}</Tag>
+              <Tag>帧 {issueDraft.frame}</Tag>
+              <Tag>{issueDraft.time_seconds.toFixed(2)}s</Tag>
+            </Space>
+            <div className="issue-record-form-grid">
+              <label className="sentence-field">
+                <span>问题类型 *</span>
+                <Select<WorkIssueType>
+                  value={issueDraft.issue_type}
+                  options={WORK_ISSUE_TYPE_OPTIONS.map((option) => ({ ...option }))}
+                  onChange={(issue_type) =>
+                    setIssueDraft((current) => (current ? { ...current, issue_type } : current))
+                  }
+                />
+              </label>
+              <label className="sentence-field">
+                <span>严重程度 *</span>
+                <Select<WorkIssueSeverity>
+                  value={issueDraft.severity}
+                  options={WORK_ISSUE_SEVERITY_OPTIONS.map((option) => ({ ...option }))}
+                  onChange={(severity) =>
+                    setIssueDraft((current) => (current ? { ...current, severity } : current))
+                  }
+                />
+              </label>
+            </div>
+            <label className="sentence-field">
+              <span>问题说明 *</span>
+              <Input.TextArea
+                rows={4}
+                value={issueDraft.comment}
+                placeholder="用一句话说明这里需要如何修改"
+                maxLength={500}
+                showCount
+                onChange={(event) =>
+                  setIssueDraft((current) =>
+                    current ? { ...current, comment: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
+          </div>
+        )}
+      </Modal>
       <Modal
         open={clearOpen}
         title="清空全部标注？"

@@ -10,6 +10,7 @@ export type WorkbenchState = {
 export type WorkbenchAction =
   | { type: "begin-boundary" }
   | { type: "commit" }
+  | { type: "reset"; segments: Segment[] }
   | { type: "replace"; segments: Segment[] }
   | { type: "update-text"; id: string; text: string }
   | { type: "update-fine"; id: string; fine_annotation: FineAnnotation; text: string }

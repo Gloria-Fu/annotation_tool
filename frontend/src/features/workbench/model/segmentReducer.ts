@@ -59,6 +59,8 @@ export function segmentReducer(state: WorkbenchState, action: WorkbenchAction): 
         future: [],
         draftOrigin: undefined,
       };
+    case "reset":
+      return createWorkbenchState(action.segments);
     case "replace":
       return commit(state, action.segments);
     case "update-text":

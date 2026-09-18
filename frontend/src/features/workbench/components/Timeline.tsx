@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Segment } from "../../../shared/api/types";
-import { formatFrameTime, frameToPercent } from "../model/timelineMath";
+import { formatFrameTime, frameToPercent, uncoveredFrameRanges } from "../model/timelineMath";
 import { currentFineAnnotation } from "../model/fineAnnotation";
 import { getSkillDefinition } from "../skillDefinitions";
 
@@ -38,6 +38,7 @@ export function Timeline({
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ index: number } | null>(null);
   const seekRef = useRef(false);
+  const gaps = uncoveredFrameRanges(segments, length);
   const seekAt = (clientX: number) => {
     if (!timelineRef.current) return;
     const rect = timelineRef.current.getBoundingClientRect();
@@ -109,6 +110,18 @@ export function Timeline({
             seekRef.current = true;
           }}
         />
+        {gaps.map((gap) => (
+          <div
+            key={`${gap.start_frame}-${gap.end_frame}`}
+            className="timeline-gap"
+            style={{
+              left: `${frameToPercent(gap.start_frame, length)}%`,
+              width: `${frameToPercent(gap.end_frame - gap.start_frame, length)}%`,
+            }}
+          >
+            <span>未覆盖</span>
+          </div>
+        ))}
         {segments.map((segment, index) => (
           <div
             key={segment.id}
