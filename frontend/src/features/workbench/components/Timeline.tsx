@@ -10,6 +10,7 @@ export function Timeline({
   currentFrame,
   length,
   fps,
+  displayTimeScale,
   zoom,
   onSelect,
   onSeek,
@@ -24,6 +25,7 @@ export function Timeline({
   currentFrame: number;
   length: number;
   fps: number;
+  displayTimeScale: number;
   zoom: number;
   onSelect: (segment: Segment) => void;
   onSeek: (frame: number) => void;
@@ -169,7 +171,7 @@ export function Timeline({
         <div className="timeline-axis">
           {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
             <span key={ratio} style={{ left: `${ratio * 100}%` }}>
-              {formatFrameTime(Math.round(length * ratio), fps)}
+              {formatFrameTime(Math.round(length * ratio), fps, displayTimeScale)}
             </span>
           ))}
         </div>

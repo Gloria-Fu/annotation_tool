@@ -35,7 +35,6 @@ it("forwards native HEAD playback events to the sync controller", () => {
     <MultiViewPlayer
       context={context}
       registerVideo={vi.fn()}
-      changeRate={vi.fn()}
       onPlay={onPlay}
       onPause={onPause}
       onFrameChange={vi.fn()}
@@ -49,6 +48,7 @@ it("forwards native HEAD playback events to the sync controller", () => {
   fireEvent.pause(videos[0]);
 
   expect(videos).toHaveLength(3);
+  expect(videos[0]).not.toHaveAttribute("controls");
   expect(onPlay).toHaveBeenCalledWith(videos[0]);
   expect(onPause).toHaveBeenCalledWith(videos[0]);
 });

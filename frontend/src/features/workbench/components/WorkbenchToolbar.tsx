@@ -4,6 +4,8 @@ import {
   ChevronRight,
   Eraser,
   Merge,
+  Pause,
+  Play,
   RotateCcw,
   Scissors,
   Undo2,
@@ -17,14 +19,18 @@ export function WorkbenchToolbar({
   currentFrame,
   length,
   fps,
+  displayTimeScale,
   zoom,
   rate,
+  playing,
   canUndo,
   canRedo,
   onSplit,
   onClear,
   onZoomChange,
   onRateChange,
+  onPlay,
+  onPause,
   onUndo,
   onRedo,
   onSeek,
@@ -38,14 +44,18 @@ export function WorkbenchToolbar({
   currentFrame: number;
   length: number;
   fps: number;
+  displayTimeScale: number;
   zoom: number;
   rate: number;
+  playing: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onSplit: () => void;
   onClear: () => void;
   onZoomChange: (zoom: number) => void;
   onRateChange: (rate: number) => void;
+  onPlay: () => void;
+  onPause: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onSeek: (frame: number) => void;
@@ -109,6 +119,13 @@ export function WorkbenchToolbar({
         onClick={() => onZoomChange(1)}
         title="重置时间轴缩放"
       />
+      <Button
+        icon={playing ? <Pause size={15} /> : <Play size={15} />}
+        onClick={playing ? onPause : onPlay}
+        title={playing ? "暂停" : "播放"}
+      >
+        {playing ? "暂停" : "播放"}
+      </Button>
       <Select
         value={rate}
         onChange={onRateChange}
@@ -152,7 +169,8 @@ export function WorkbenchToolbar({
       <Button icon={<Undo2 size={15} />} disabled={!canUndo} onClick={onUndo} title="撤销" />
       <Button icon={<Redo2 size={15} />} disabled={!canRedo} onClick={onRedo} title="重做" />
       <Typography.Text type="secondary">
-        {formatFrameTime(currentFrame, fps)} / {formatFrameTime(length, fps)}
+        {formatFrameTime(currentFrame, fps, displayTimeScale)} /{" "}
+        {formatFrameTime(length, fps, displayTimeScale)}
       </Typography.Text>
     </div>
   );

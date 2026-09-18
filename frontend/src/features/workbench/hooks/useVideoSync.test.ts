@@ -35,6 +35,34 @@ it("does not reset a native seek when the same video ref is reattached", () => {
   expect(replacement.currentTime).toBe(1);
 });
 
+it("shows 1x while applying the hidden 1.3x preview playback rate", () => {
+  const { result } = renderHook(() => useVideoSync(100, 10));
+  const video = document.createElement("video");
+  const playback = mockVideoPlayback(video);
+
+  act(() => result.current.registerVideo("head", video));
+  expect(result.current.rate).toBe(1);
+  expect(video.playbackRate).toBe(1.3);
+
+  act(() => result.current.playSegment(20, 60));
+
+  expect(video.currentTime).toBe(2);
+  expect(video.playbackRate).toBe(1.3);
+  expect(result.current.currentFrame).toBe(20);
+  expect(playback.play).toHaveBeenCalledOnce();
+});
+
+it("maps user-facing playback rates onto the hidden preview baseline", () => {
+  const { result } = renderHook(() => useVideoSync(100, 10));
+  const video = document.createElement("video");
+  act(() => result.current.registerVideo("head", video));
+
+  act(() => result.current.changeRate(2));
+
+  expect(result.current.rate).toBe(2);
+  expect(video.playbackRate).toBe(2.6);
+});
+
 it("plays and pauses every registered view together", () => {
   const { result } = renderHook(() => useVideoSync(100, 10));
   const head = document.createElement("video");
@@ -127,6 +155,20 @@ it("pauses playback when jumping to a keyframe", () => {
   expect(side.currentTime).toBe(2);
   expect(headPlayback.pause).toHaveBeenCalled();
   expect(sidePlayback.pause).toHaveBeenCalled();
+});
+
+it("seeks exactly when nudging by a single frame", () => {
+  const { result } = renderHook(() => useVideoSync(100, 30));
+  const head = document.createElement("video");
+  act(() => {
+    result.current.registerVideo("head", head);
+    result.current.pauseAtFrame(10);
+  });
+
+  act(() => result.current.pauseAtFrame(11));
+
+  expect(result.current.currentFrame).toBe(11);
+  expect(head.currentTime).toBeCloseTo(11 / 30);
 });
 
 it("keeps the video registration callback stable across frame updates", () => {

@@ -1,3 +1,6 @@
+export const DEFAULT_PREVIEW_RATE = 1.3;
+export const DEFAULT_PREVIEW_TIME_SCALE = 1 / DEFAULT_PREVIEW_RATE;
+
 export function clampFrame(frame: number, length: number) {
   return Math.max(0, Math.min(length, Math.round(frame)));
 }
@@ -7,12 +10,21 @@ export function frameToPercent(frame: number, length: number) {
   return (clampFrame(frame, length) / length) * 100;
 }
 
-export function durationSeconds(startFrame: number, endFrame: number, fps: number) {
-  return (endFrame - startFrame) / fps;
+export function durationSeconds(
+  startFrame: number,
+  endFrame: number,
+  fps: number,
+  displayTimeScale = 1,
+) {
+  return ((endFrame - startFrame) / fps) * displayTimeScale;
 }
 
-export function formatFrameTime(frame: number, fps: number) {
-  return `${(frame / fps).toFixed(2)}s`;
+export function displaySeconds(frame: number, fps: number, displayTimeScale = 1) {
+  return (frame / fps) * displayTimeScale;
+}
+
+export function formatFrameTime(frame: number, fps: number, displayTimeScale = 1) {
+  return `${displaySeconds(frame, fps, displayTimeScale).toFixed(2)}s`;
 }
 
 export function boundaryLimits(

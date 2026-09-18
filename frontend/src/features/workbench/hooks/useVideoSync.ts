@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clampFrame } from "../model/timelineMath";
+import { clampFrame, DEFAULT_PREVIEW_RATE } from "../model/timelineMath";
 
 type VideoMap = Record<string, HTMLVideoElement | null>;
+
+function nativePlaybackRate(displayRate: number) {
+  return displayRate * DEFAULT_PREVIEW_RATE;
+}
 
 export function useVideoSync(length: number, fps: number) {
   const videos = useRef<VideoMap>({});
@@ -58,7 +62,7 @@ export function useVideoSync(length: number, fps: number) {
       videos.current[key] = element;
       if (element && !initializedVideos.current.has(element)) {
         initializedVideos.current.add(element);
-        element.playbackRate = rateRef.current;
+        element.playbackRate = nativePlaybackRate(rateRef.current);
         element.currentTime = currentFrameRef.current / fps;
       }
     },
@@ -112,9 +116,7 @@ export function useVideoSync(length: number, fps: number) {
       Object.values(videos.current).forEach((video) => {
         if (!video) return;
         pauseVideo(video);
-        if (Math.abs(video.currentTime - bounded / fps) > 0.08) {
-          video.currentTime = bounded / fps;
-        }
+        video.currentTime = bounded / fps;
       });
       setPlaying(false);
     },
@@ -129,7 +131,7 @@ export function useVideoSync(length: number, fps: number) {
       const position = start / fps;
       Object.values(videos.current).forEach((video) => {
         if (!video) return;
-        video.playbackRate = rate;
+        video.playbackRate = nativePlaybackRate(rate);
         video.currentTime = position;
         playVideo(video);
       });
@@ -142,7 +144,7 @@ export function useVideoSync(length: number, fps: number) {
   const changeRate = useCallback((nextRate: number) => {
     setRate(nextRate);
     Object.values(videos.current).forEach((video) => {
-      if (video) video.playbackRate = nextRate;
+      if (video) video.playbackRate = nativePlaybackRate(nextRate);
     });
     rateRef.current = nextRate;
   }, []);

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { boundaryLimits, clampFrame, durationSeconds, frameToPercent } from "./timelineMath";
+import {
+  boundaryLimits,
+  clampFrame,
+  DEFAULT_PREVIEW_TIME_SCALE,
+  displaySeconds,
+  durationSeconds,
+  formatFrameTime,
+  frameToPercent,
+} from "./timelineMath";
 
 describe("timelineMath", () => {
   it("clamps frames to the episode", () => {
@@ -10,6 +18,9 @@ describe("timelineMath", () => {
   it("converts frames and durations consistently", () => {
     expect(frameToPercent(5, 10)).toBe(50);
     expect(durationSeconds(10, 40, 30)).toBe(1);
+    expect(displaySeconds(39, 30, DEFAULT_PREVIEW_TIME_SCALE)).toBeCloseTo(1);
+    expect(durationSeconds(0, 39, 30, DEFAULT_PREVIEW_TIME_SCALE)).toBeCloseTo(1);
+    expect(formatFrameTime(39, 30, DEFAULT_PREVIEW_TIME_SCALE)).toBe("1.00s");
   });
 
   it("keeps a boundary inside its neighboring segments", () => {

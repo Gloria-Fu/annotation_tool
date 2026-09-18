@@ -35,6 +35,7 @@ export function SegmentEditor({
   selected,
   reviewing,
   fps,
+  displayTimeScale,
   currentFrame,
   pointMarking,
   onBeginPointMark,
@@ -58,6 +59,7 @@ export function SegmentEditor({
   selected?: Segment;
   reviewing: boolean;
   fps: number;
+  displayTimeScale: number;
   currentFrame: number;
   pointMarking: boolean;
   onBeginPointMark: (
@@ -278,8 +280,12 @@ export function SegmentEditor({
       </section>
       <div className="editor-fields">
         <div className="segment-meta">
-          {formatFrameTime(selected.start_frame, fps)} - {formatFrameTime(selected.end_frame, fps)}{" "}
-          · 时长 {durationSeconds(selected.start_frame, selected.end_frame, fps).toFixed(2)} 秒
+          {formatFrameTime(selected.start_frame, fps, displayTimeScale)} -{" "}
+          {formatFrameTime(selected.end_frame, fps, displayTimeScale)} · 时长{" "}
+          {durationSeconds(selected.start_frame, selected.end_frame, fps, displayTimeScale).toFixed(
+            2,
+          )}{" "}
+          秒
         </div>
         {!isInvalidSegment && (
           <>

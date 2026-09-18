@@ -63,7 +63,6 @@ function KeyframeMarker({ point, label }: { point: KeyframePoint; label?: string
 export function MultiViewPlayer({
   context,
   registerVideo,
-  changeRate,
   onPlay,
   onPause,
   onFrameChange,
@@ -75,7 +74,6 @@ export function MultiViewPlayer({
 }: {
   context: WorkContext;
   registerVideo: (key: string, element: HTMLVideoElement | null) => void;
-  changeRate: (rate: number) => void;
   onPlay: (source?: HTMLVideoElement) => void;
   onPause: (source?: HTMLVideoElement) => void;
   onFrameChange: (frame: number) => void;
@@ -121,9 +119,6 @@ export function MultiViewPlayer({
             src={context.video_urls[key]}
             preload={index === 0 ? "auto" : "metadata"}
             muted={index > 0}
-            onRateChange={
-              index === 0 ? (event) => changeRate(event.currentTarget.playbackRate) : undefined
-            }
             onTimeUpdate={
               index === 0
                 ? (event) =>
@@ -132,7 +127,7 @@ export function MultiViewPlayer({
             }
             onPlay={index === 0 ? (event) => onPlay(event.currentTarget) : undefined}
             onPause={index === 0 ? (event) => onPause(event.currentTarget) : undefined}
-            controls={index === 0}
+            controls={false}
           />
           {pointMarking && (
             <button
