@@ -323,6 +323,8 @@ class StatsOut(BaseModel):
     by_status: dict[str, int]
     completion_rate: float
     effective_video_seconds: float
+    raw_effective_video_seconds: float
+    display_effective_video_seconds: float
     by_person: list[dict[str, Any]]
 
 
@@ -338,6 +340,8 @@ class WorkMetricOut(BaseModel):
     returned_count: int
     final_approved_count: int
     effective_video_seconds: float
+    raw_effective_video_seconds: float
+    display_effective_video_seconds: float
     average_completion_seconds: float | None
     first_pass_rate: float
     rework_rate: float

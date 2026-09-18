@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import false, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.permissions import ensure_project_access, managed_group_ids, managed_user_ids
 from app.features.users.service import manageable_project_ids
 from app.models import (
@@ -75,25 +76,31 @@ def stats(project_id: str, user: User, db: Session) -> StatsOut:
 
     by_person = []
     for user_id, video_ids in person_video_ids.items():
-        effective_seconds = sum(
+        raw_effective_seconds = sum(
             completed_video_durations[episode_id]
             for episode_id in video_ids
             if episode_id in completed_video_durations
         )
+        display_effective_seconds = _display_video_seconds(raw_effective_seconds)
         by_person.append(
             {
                 "user_id": user_id,
                 "display_name": person_names[user_id],
                 "completed": person_completed_counts[user_id],
-                "effective_video_seconds": effective_seconds,
+                "effective_video_seconds": _visible_video_seconds(raw_effective_seconds, user),
+                "raw_effective_video_seconds": raw_effective_seconds,
+                "display_effective_video_seconds": display_effective_seconds,
             }
         )
+    raw_total_effective_seconds = sum(completed_video_durations.values())
     return StatsOut(
         project_id=project_id,
         total=total,
         by_status=by_status,
         completion_rate=(by_status.get(ItemStatus.COMPLETED.value, 0) / total if total else 0),
-        effective_video_seconds=sum(completed_video_durations.values()),
+        effective_video_seconds=_visible_video_seconds(raw_total_effective_seconds, user),
+        raw_effective_video_seconds=raw_total_effective_seconds,
+        display_effective_video_seconds=_display_video_seconds(raw_total_effective_seconds),
         by_person=by_person,
     )
 
@@ -199,6 +206,20 @@ def _video_duration_seconds(length: int, dataset_info: object) -> float:
         if parsed_fps > 0:
             fps = parsed_fps
     return max(0, length) / fps
+
+
+def _display_video_seconds(raw_seconds: float) -> float:
+    return raw_seconds / settings.annotation_preview_speed_factor
+
+
+def _can_view_raw_video_seconds(user: User) -> bool:
+    return user.role == Role.DEVELOPER_ADMIN
+
+
+def _visible_video_seconds(raw_seconds: float, user: User) -> float:
+    if _can_view_raw_video_seconds(user):
+        return raw_seconds
+    return _display_video_seconds(raw_seconds)
 
 
 def _scope_project_ids(db: Session, user: User, project_id: str | None) -> set[str] | None:
@@ -421,6 +442,7 @@ def _effective_video_ids_by_period(
 
 def _metric(
     user: User,
+    viewer: User,
     events: WorkEvents,
     period_start: date,
     period_end: date,
@@ -536,6 +558,9 @@ def _metric(
     rejected_count = sum(event.decision == "request_changes" for event in user_reviews)
     first_submission_count = len(first_submissions)
     review_count = len(user_reviews)
+    raw_effective_video_seconds = _effective_video_seconds(
+        user, events, period_start, period_end, effective_video_ids
+    )
     return WorkMetricOut(
         period_start=period_start,
         period_end=period_end,
@@ -547,9 +572,9 @@ def _metric(
         resubmissions=len(resubmissions),
         returned_count=len(returned_items),
         final_approved_count=len(final_approved_items),
-        effective_video_seconds=_effective_video_seconds(
-            user, events, period_start, period_end, effective_video_ids
-        ),
+        effective_video_seconds=_visible_video_seconds(raw_effective_video_seconds, viewer),
+        raw_effective_video_seconds=raw_effective_video_seconds,
+        display_effective_video_seconds=_display_video_seconds(raw_effective_video_seconds),
         average_completion_seconds=_average_or_none(completion_seconds),
         first_pass_rate=(
             first_pass_count / first_submission_count if first_submission_count else 0
@@ -631,9 +656,9 @@ def personal_work_statistics(
     events = _load_work_events(db, project_ids)
     period_windows = _period_windows(start, end, normalized_granularity)
     period_video_ids = _effective_video_ids_by_period(user, events, period_windows)
-    summary = _metric(user, events, start, end)
+    summary = _metric(user, user, events, start, end)
     periods = [
-        _metric(user, events, period_start, period_end, period_video_ids[index])
+        _metric(user, user, events, period_start, period_end, period_video_ids[index])
         for index, (period_start, period_end) in enumerate(period_windows)
     ]
     return PersonalWorkStatisticsOut(
@@ -692,7 +717,7 @@ def people_work_statistics(
     return PeopleWorkStatisticsOut(
         start_date=start,
         end_date=end,
-        people=[_metric(person, events, start, end) for person in people],
+        people=[_metric(person, user, events, start, end) for person in people],
     )
 
 
@@ -708,7 +733,16 @@ def _csv_response(rows: Sequence[Sequence[object]], filename: str) -> StreamingR
     )
 
 
-def _metric_csv_row(metric: WorkMetricOut) -> list[object]:
+def _metric_csv_video_columns(metric: WorkMetricOut, user: User) -> list[object]:
+    if _can_view_raw_video_seconds(user):
+        return [
+            metric.display_effective_video_seconds,
+            metric.raw_effective_video_seconds,
+        ]
+    return [metric.effective_video_seconds]
+
+
+def _metric_csv_row(metric: WorkMetricOut, user: User) -> list[object]:
     return [
         metric.period_start.isoformat(),
         metric.period_end.isoformat(),
@@ -720,7 +754,7 @@ def _metric_csv_row(metric: WorkMetricOut) -> list[object]:
         metric.resubmissions,
         metric.returned_count,
         metric.final_approved_count,
-        metric.effective_video_seconds,
+        *_metric_csv_video_columns(metric, user),
         metric.first_pass_rate,
         metric.rework_rate,
         metric.review_claimed_count,
@@ -753,7 +787,11 @@ def personal_work_csv(
         "重新提交数",
         "被退回数",
         "最终通过数",
-        "去重有效视频时长(秒)",
+        *(
+            ["对外去重有效视频时长(秒)", "原始去重有效视频时长(秒)"]
+            if _can_view_raw_video_seconds(user)
+            else ["去重有效视频时长(秒)"]
+        ),
         "一次通过率",
         "返工率",
         "领取审核数",
@@ -764,7 +802,9 @@ def personal_work_csv(
         "审核通过率",
         "审核退回率",
     ]
-    return _csv_response([headers, *[_metric_csv_row(row) for row in data.periods]], "my-work.csv")
+    return _csv_response(
+        [headers, *[_metric_csv_row(row, user) for row in data.periods]], "my-work.csv"
+    )
 
 
 def people_work_csv(
@@ -787,7 +827,11 @@ def people_work_csv(
         "重新提交数",
         "被退回数",
         "最终通过数",
-        "去重有效视频时长(秒)",
+        *(
+            ["对外去重有效视频时长(秒)", "原始去重有效视频时长(秒)"]
+            if _can_view_raw_video_seconds(user)
+            else ["去重有效视频时长(秒)"]
+        ),
         "一次通过率",
         "返工率",
         "领取审核数",
@@ -799,5 +843,5 @@ def people_work_csv(
         "审核退回率",
     ]
     return _csv_response(
-        [headers, *[_metric_csv_row(row) for row in data.people]], "people-work.csv"
+        [headers, *[_metric_csv_row(row, user) for row in data.people]], "people-work.csv"
     )

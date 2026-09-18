@@ -4699,6 +4699,14 @@
             "type": "number",
             "title": "Effective Video Seconds"
           },
+          "raw_effective_video_seconds": {
+            "type": "number",
+            "title": "Raw Effective Video Seconds"
+          },
+          "display_effective_video_seconds": {
+            "type": "number",
+            "title": "Display Effective Video Seconds"
+          },
           "by_person": {
             "items": {
               "additionalProperties": true,
@@ -4715,6 +4723,8 @@
           "by_status",
           "completion_rate",
           "effective_video_seconds",
+          "raw_effective_video_seconds",
+          "display_effective_video_seconds",
           "by_person"
         ],
         "title": "StatsOut"
@@ -5355,6 +5365,14 @@
             "type": "number",
             "title": "Effective Video Seconds"
           },
+          "raw_effective_video_seconds": {
+            "type": "number",
+            "title": "Raw Effective Video Seconds"
+          },
+          "display_effective_video_seconds": {
+            "type": "number",
+            "title": "Display Effective Video Seconds"
+          },
           "average_completion_seconds": {
             "anyOf": [
               {
@@ -5423,6 +5441,8 @@
           "returned_count",
           "final_approved_count",
           "effective_video_seconds",
+          "raw_effective_video_seconds",
+          "display_effective_video_seconds",
           "average_completion_seconds",
           "first_pass_rate",
           "rework_rate",

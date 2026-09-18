@@ -5,6 +5,7 @@ import { dashboardApi } from "./api";
 import { useShell } from "../../app/shellContext";
 import { PageHeading } from "../../shared/ui/PageHeading";
 import { queryKeys } from "../../shared/queryKeys";
+import type { Role } from "../../shared/api/types";
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)} 秒`;
@@ -15,8 +16,12 @@ function formatDuration(seconds: number): string {
   return remainingMinutes ? `${hours} 小时 ${remainingMinutes} 分钟` : `${hours} 小时`;
 }
 
+function canViewRawVideoSeconds(role: Role): boolean {
+  return role === "developer_admin";
+}
+
 export function DashboardPage() {
-  const { projectId } = useShell();
+  const { projectId, user } = useShell();
   const { data, isLoading } = useQuery({
     queryKey: projectId ? queryKeys.stats(projectId) : queryKeys.statsEmpty,
     queryFn: () => dashboardApi.stats(projectId as string),
@@ -29,6 +34,7 @@ export function DashboardPage() {
     (data?.by_status.review_pending || 0) +
     (data?.by_status.review_assigned || 0) +
     (data?.by_status.reviewing || 0);
+  const showRawVideoSeconds = canViewRawVideoSeconds(user.role);
 
   return (
     <>
@@ -58,10 +64,27 @@ export function DashboardPage() {
           <div className="metric-label">完成率</div>
           <div className="metric-value">{Math.round((data?.completion_rate || 0) * 100)}%</div>
         </div>
-        <div className="metric">
-          <div className="metric-label">已完成去重有效视频时长</div>
-          <div className="metric-value">{formatDuration(data?.effective_video_seconds || 0)}</div>
-        </div>
+        {showRawVideoSeconds ? (
+          <>
+            <div className="metric">
+              <div className="metric-label">已完成对外去重有效视频时长</div>
+              <div className="metric-value">
+                {formatDuration(data?.display_effective_video_seconds || 0)}
+              </div>
+            </div>
+            <div className="metric">
+              <div className="metric-label">已完成原始去重有效视频时长</div>
+              <div className="metric-value">
+                {formatDuration(data?.raw_effective_video_seconds || 0)}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="metric">
+            <div className="metric-label">已完成去重有效视频时长</div>
+            <div className="metric-value">{formatDuration(data?.effective_video_seconds || 0)}</div>
+          </div>
+        )}
       </div>
       <div className="table-panel">
         <Table
@@ -71,11 +94,26 @@ export function DashboardPage() {
           columns={[
             { title: "人员", dataIndex: "display_name" },
             { title: "完成条目", dataIndex: "completed" },
-            {
-              title: "已完成去重有效视频时长",
-              dataIndex: "effective_video_seconds",
-              render: (value: number) => formatDuration(value),
-            },
+            ...(showRawVideoSeconds
+              ? [
+                  {
+                    title: "已完成对外去重有效视频时长",
+                    dataIndex: "display_effective_video_seconds",
+                    render: (value: number) => formatDuration(value),
+                  },
+                  {
+                    title: "已完成原始去重有效视频时长",
+                    dataIndex: "raw_effective_video_seconds",
+                    render: (value: number) => formatDuration(value),
+                  },
+                ]
+              : [
+                  {
+                    title: "已完成去重有效视频时长",
+                    dataIndex: "effective_video_seconds",
+                    render: (value: number) => formatDuration(value),
+                  },
+                ]),
           ]}
         />
       </div>

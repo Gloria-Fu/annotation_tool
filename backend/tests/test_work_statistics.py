@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from app.core.config import settings
 from app.features.reports.service import people_work_statistics, personal_work_statistics, stats
 from app.features.task_packages.service import add_package_group
 from app.models import (
@@ -123,10 +124,13 @@ def test_personal_statistics_use_history_and_revision_timeline(db, tmp_path, mon
     assert result.summary.final_approved_count == 1
     assert result.summary.first_pass_rate == 0
     assert result.summary.rework_rate == 1
-    assert result.summary.effective_video_seconds == 10 / 20
+    assert result.summary.effective_video_seconds == (10 / 20) / 1.3
+    assert result.summary.raw_effective_video_seconds == 10 / 20
+    assert result.summary.display_effective_video_seconds == (10 / 20) / 1.3
     assert result.summary.average_completion_seconds == 1800
     assert result.periods[0].period_start.isoformat() == "2026-09-10"
-    assert result.periods[0].effective_video_seconds == 10 / 20
+    assert result.periods[0].effective_video_seconds == (10 / 20) / 1.3
+    assert result.periods[0].raw_effective_video_seconds == 10 / 20
     assert result.periods[1].effective_video_seconds == 0
 
     reviewer_result = personal_work_statistics(
@@ -143,7 +147,8 @@ def test_personal_statistics_use_history_and_revision_timeline(db, tmp_path, mon
     assert reviewer_result.summary.rejected_count == 1
     assert reviewer_result.summary.review_pass_rate == 0.5
     assert reviewer_result.summary.review_return_rate == 0.5
-    assert reviewer_result.summary.effective_video_seconds == 10 / 20
+    assert reviewer_result.summary.effective_video_seconds == (10 / 20) / 1.3
+    assert reviewer_result.summary.raw_effective_video_seconds == 10 / 20
     assert reviewer_result.summary.average_review_seconds == 1200
 
 
@@ -176,8 +181,12 @@ def test_project_statistics_deduplicate_completed_episode_duration(db, tmp_path,
     result = stats(package.project_id, admin, db)
 
     assert result.effective_video_seconds == 10 / 30
+    assert result.raw_effective_video_seconds == 10 / 30
+    assert result.display_effective_video_seconds == (10 / 30) / 1.3
     assert result.by_person[0]["completed"] == 2
     assert result.by_person[0]["effective_video_seconds"] == 10 / 30
+    assert result.by_person[0]["raw_effective_video_seconds"] == 10 / 30
+    assert result.by_person[0]["display_effective_video_seconds"] == (10 / 30) / 1.3
 
 
 def test_people_statistics_are_project_scoped_and_manager_protected(db, tmp_path, monkeypatch):
@@ -197,6 +206,8 @@ def test_people_statistics_are_project_scoped_and_manager_protected(db, tmp_path
     )
     assert [person.user_id for person in result.people] == [annotator.id]
     assert result.people[0].first_submissions == 1
+    assert result.people[0].effective_video_seconds == (10 / 30) / 1.3
+    assert result.people[0].raw_effective_video_seconds == 10 / 30
 
     with pytest.raises(HTTPException) as error:
         people_work_statistics(
@@ -208,6 +219,31 @@ def test_people_statistics_are_project_scoped_and_manager_protected(db, tmp_path
             None,
         )
     assert error.value.status_code == 403
+
+
+def test_display_duration_uses_configured_preview_speed_factor(db, tmp_path, monkeypatch):
+    _, annotator, _, package, item = setup_item(db, tmp_path, monkeypatch)
+    monkeypatch.setattr(settings, "annotation_preview_speed_factor", 2.0)
+    add_event_data(
+        db,
+        item,
+        annotator,
+        make_user(db, "reviewer-config", Role.REVIEWER),
+        datetime(2026, 9, 10, tzinfo=UTC),
+    )
+
+    result = personal_work_statistics(
+        annotator,
+        db,
+        package.project_id,
+        datetime(2026, 9, 10, tzinfo=UTC).date(),
+        datetime(2026, 9, 10, tzinfo=UTC).date(),
+        "day",
+    )
+
+    assert result.summary.raw_effective_video_seconds == 10 / 30
+    assert result.summary.display_effective_video_seconds == (10 / 30) / 2
+    assert result.summary.effective_video_seconds == (10 / 30) / 2
 
 
 def test_outsourcing_manager_people_statistics_are_group_scoped(db, tmp_path, monkeypatch):
@@ -236,3 +272,4 @@ def test_outsourcing_manager_people_statistics_are_group_scoped(db, tmp_path, mo
 
     assert [person.user_id for person in result.people] == [annotator.id]
     assert result.people[0].first_submissions == 1
+    assert result.people[0].effective_video_seconds == (10 / 30) / 1.3

@@ -231,8 +231,20 @@ def test_work_context_contract_exposes_assignee_identities():
     user_schema = schemas["WorkContextUser"]
 
     assert set(user_schema["required"]) == {"id", "username", "display_name"}
+    assert "preview_speed_factor" in work_context
     assert work_context["annotator"]["anyOf"][0]["$ref"] == "#/components/schemas/WorkContextUser"
     assert work_context["reviewer"]["anyOf"][0]["$ref"] == "#/components/schemas/WorkContextUser"
+
+
+def test_work_statistics_contract_exposes_raw_and_display_duration_fields():
+    schemas = app.openapi()["components"]["schemas"]
+    stats = schemas["StatsOut"]
+    metric = schemas["WorkMetricOut"]
+
+    for schema in (stats, metric):
+        assert "effective_video_seconds" in schema["required"]
+        assert "raw_effective_video_seconds" in schema["required"]
+        assert "display_effective_video_seconds" in schema["required"]
 
 
 def test_health_endpoint_returns_success(client):

@@ -48,6 +48,34 @@ function formatDuration(seconds: number | null): string {
   return remainingMinutes ? `${hours} 小时 ${remainingMinutes} 分钟` : `${hours} 小时`;
 }
 
+function canViewRawVideoSeconds(role: Role): boolean {
+  return role === "developer_admin";
+}
+
+function effectiveVideoSecondsColumns(showRawVideoSeconds: boolean): TableColumnsType<WorkMetric> {
+  if (showRawVideoSeconds) {
+    return [
+      {
+        title: "对外去重有效视频时长",
+        dataIndex: "display_effective_video_seconds",
+        render: (value: number) => formatDuration(value),
+      },
+      {
+        title: "原始去重有效视频时长",
+        dataIndex: "raw_effective_video_seconds",
+        render: (value: number) => formatDuration(value),
+      },
+    ];
+  }
+  return [
+    {
+      title: "去重有效视频时长",
+      dataIndex: "effective_video_seconds",
+      render: (value: number) => formatDuration(value),
+    },
+  ];
+}
+
 function MetricCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="metric">
@@ -176,6 +204,7 @@ function PersonalWorkStatisticsPage() {
   );
   const showAnnotation = user.role !== "reviewer";
   const showReview = user.role !== "annotator";
+  const showRawVideoSeconds = canViewRawVideoSeconds(user.role);
   const columns = useMemo<TableColumnsType<WorkMetric>>(
     () => [
       {
@@ -184,15 +213,11 @@ function PersonalWorkStatisticsPage() {
         render: (value: string, row) =>
           value === row.period_end ? value : `${value} 至 ${row.period_end}`,
       },
-      {
-        title: "去重有效视频时长",
-        dataIndex: "effective_video_seconds",
-        render: (value: number) => formatDuration(value),
-      },
+      ...effectiveVideoSecondsColumns(showRawVideoSeconds),
       ...(showAnnotation ? annotationColumns() : []),
       ...(showReview ? reviewColumns() : []),
     ],
-    [showAnnotation, showReview],
+    [showAnnotation, showRawVideoSeconds, showReview],
   );
 
   if (error instanceof Error) return <Alert type="error" message={error.message} />;
@@ -232,10 +257,23 @@ function PersonalWorkStatisticsPage() {
             </span>
           </div>
           <div className="metric-grid">
-            <MetricCard
-              label="去重有效视频时长"
-              value={formatDuration(data.summary.effective_video_seconds)}
-            />
+            {showRawVideoSeconds ? (
+              <>
+                <MetricCard
+                  label="对外去重有效视频时长"
+                  value={formatDuration(data.summary.display_effective_video_seconds)}
+                />
+                <MetricCard
+                  label="原始去重有效视频时长"
+                  value={formatDuration(data.summary.raw_effective_video_seconds)}
+                />
+              </>
+            ) : (
+              <MetricCard
+                label="去重有效视频时长"
+                value={formatDuration(data.summary.effective_video_seconds)}
+              />
+            )}
             {showAnnotation && <AnnotationMetricCards metric={data.summary} />}
             {showReview && <ReviewMetricCards metric={data.summary} />}
           </div>
@@ -265,7 +303,7 @@ function PersonalWorkStatisticsPage() {
 }
 
 function PeopleWorkStatisticsPage() {
-  const { projectId } = useShell();
+  const { projectId, user } = useShell();
   const [range, setRange] = useState<DateRange>(initialRange);
   const [role, setRole] = useState<Role>();
   const query: WorkStatisticsQuery = {
@@ -281,6 +319,7 @@ function PeopleWorkStatisticsPage() {
 
   if (error instanceof Error) return <Alert type="error" message={error.message} />;
 
+  const showRawVideoSeconds = canViewRawVideoSeconds(user.role);
   const columns: TableColumnsType<WorkMetric> = [
     { title: "人员", dataIndex: "display_name" },
     {
@@ -308,11 +347,7 @@ function PeopleWorkStatisticsPage() {
       title: "最终通过",
       dataIndex: "final_approved_count",
     },
-    {
-      title: "去重有效视频时长",
-      dataIndex: "effective_video_seconds",
-      render: (value: number) => formatDuration(value),
-    },
+    ...effectiveVideoSecondsColumns(showRawVideoSeconds),
     {
       title: "标注通过率",
       dataIndex: "first_pass_rate",

@@ -1267,6 +1267,10 @@ export interface components {
             completion_rate: number;
             /** Effective Video Seconds */
             effective_video_seconds: number;
+            /** Raw Effective Video Seconds */
+            raw_effective_video_seconds: number;
+            /** Display Effective Video Seconds */
+            display_effective_video_seconds: number;
             /** By Person */
             by_person: {
                 [key: string]: unknown;
@@ -1490,6 +1494,10 @@ export interface components {
             final_approved_count: number;
             /** Effective Video Seconds */
             effective_video_seconds: number;
+            /** Raw Effective Video Seconds */
+            raw_effective_video_seconds: number;
+            /** Display Effective Video Seconds */
+            display_effective_video_seconds: number;
             /** Average Completion Seconds */
             average_completion_seconds: number | null;
             /** First Pass Rate */
