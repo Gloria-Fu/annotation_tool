@@ -5232,6 +5232,10 @@
             "type": "object",
             "title": "Video Urls"
           },
+          "preview_speed_factor": {
+            "type": "number",
+            "title": "Preview Speed Factor"
+          },
           "latest_revision": {
             "anyOf": [
               {
@@ -5276,6 +5280,7 @@
           "tasks",
           "data_url",
           "video_urls",
+          "preview_speed_factor",
           "latest_revision"
         ],
         "title": "WorkContext"

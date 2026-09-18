@@ -255,6 +255,7 @@ class WorkContext(BaseModel):
     tasks: list[str]
     data_url: str
     video_urls: dict[str, str]
+    preview_speed_factor: float
     latest_revision: dict[str, Any] | None
     review_comment: str | None = None
     quality_comment: str | None = None

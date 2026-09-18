@@ -142,6 +142,7 @@ test("developer admin can generate and open a quality sampling list", async ({ p
         episode_index: 1,
         length: 10,
         fps: 30,
+        preview_speed_factor: 1.3,
         tasks: ["pick"],
         data_url: "/api/v1/work-items/item-1/data",
         video_urls: {},

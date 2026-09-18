@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clampFrame, DEFAULT_PREVIEW_RATE } from "../model/timelineMath";
+import { clampFrame } from "../model/timelineMath";
 
 type VideoMap = Record<string, HTMLVideoElement | null>;
 
-function nativePlaybackRate(displayRate: number) {
-  return displayRate * DEFAULT_PREVIEW_RATE;
+function nativePlaybackRate(displayRate: number, previewSpeedFactor: number) {
+  return displayRate * previewSpeedFactor;
 }
 
-export function useVideoSync(length: number, fps: number) {
+export function useVideoSync(length: number, fps: number, previewSpeedFactor = 1) {
   const videos = useRef<VideoMap>({});
   const initializedVideos = useRef(new WeakSet<HTMLVideoElement>());
   const playbackRange = useRef<{ endFrame: number } | null>(null);
@@ -62,11 +62,11 @@ export function useVideoSync(length: number, fps: number) {
       videos.current[key] = element;
       if (element && !initializedVideos.current.has(element)) {
         initializedVideos.current.add(element);
-        element.playbackRate = nativePlaybackRate(rateRef.current);
+        element.playbackRate = nativePlaybackRate(rateRef.current, previewSpeedFactor);
         element.currentTime = currentFrameRef.current / fps;
       }
     },
-    [fps],
+    [fps, previewSpeedFactor],
   );
   const syncFrame = useCallback(
     (frame: number) => {
@@ -131,7 +131,7 @@ export function useVideoSync(length: number, fps: number) {
       const position = start / fps;
       Object.values(videos.current).forEach((video) => {
         if (!video) return;
-        video.playbackRate = nativePlaybackRate(rate);
+        video.playbackRate = nativePlaybackRate(rate, previewSpeedFactor);
         video.currentTime = position;
         playVideo(video);
       });
@@ -139,15 +139,18 @@ export function useVideoSync(length: number, fps: number) {
       setCurrentFrame(start);
       setPlaying(true);
     },
-    [fps, length, rate],
+    [fps, length, previewSpeedFactor, rate],
   );
-  const changeRate = useCallback((nextRate: number) => {
-    setRate(nextRate);
-    Object.values(videos.current).forEach((video) => {
-      if (video) video.playbackRate = nativePlaybackRate(nextRate);
-    });
-    rateRef.current = nextRate;
-  }, []);
+  const changeRate = useCallback(
+    (nextRate: number) => {
+      setRate(nextRate);
+      Object.values(videos.current).forEach((video) => {
+        if (video) video.playbackRate = nativePlaybackRate(nextRate, previewSpeedFactor);
+      });
+      rateRef.current = nextRate;
+    },
+    [previewSpeedFactor],
+  );
 
   return {
     videos,

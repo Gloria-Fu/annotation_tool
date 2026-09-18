@@ -1441,6 +1441,8 @@ export interface components {
             video_urls: {
                 [key: string]: string;
             };
+            /** Preview Speed Factor */
+            preview_speed_factor: number;
             /** Latest Revision */
             latest_revision: {
                 [key: string]: unknown;

@@ -36,7 +36,7 @@ it("does not reset a native seek when the same video ref is reattached", () => {
 });
 
 it("shows 1x while applying the hidden 1.3x preview playback rate", () => {
-  const { result } = renderHook(() => useVideoSync(100, 10));
+  const { result } = renderHook(() => useVideoSync(100, 10, 1.3));
   const video = document.createElement("video");
   const playback = mockVideoPlayback(video);
 
@@ -53,7 +53,7 @@ it("shows 1x while applying the hidden 1.3x preview playback rate", () => {
 });
 
 it("maps user-facing playback rates onto the hidden preview baseline", () => {
-  const { result } = renderHook(() => useVideoSync(100, 10));
+  const { result } = renderHook(() => useVideoSync(100, 10, 1.3));
   const video = document.createElement("video");
   act(() => result.current.registerVideo("head", video));
 

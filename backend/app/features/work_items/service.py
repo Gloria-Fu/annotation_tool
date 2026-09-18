@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.permissions import ensure_task_package_access
 from app.features.work_items import state_machine
 from app.features.work_items.state_machine import InvalidTransition
@@ -242,6 +243,7 @@ def context(item_id: str, user: User, db: Session) -> WorkContext:
         video_urls={
             key: f"/api/v1/work-items/{item.id}/media/{key}" for key in episode.video_paths
         },
+        preview_speed_factor=settings.annotation_preview_speed_factor,
         latest_revision=latest,
         review_comment=db.scalar(
             select(AssignmentHistory.reason)

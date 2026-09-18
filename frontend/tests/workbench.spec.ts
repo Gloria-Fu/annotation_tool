@@ -41,6 +41,7 @@ const contextFor = (item: typeof annotatorItem, userId: string) => ({
   episode_index: 0,
   length: 100,
   fps: 10,
+  preview_speed_factor: 1.3,
   tasks: ["pick"],
   data_url: "/api/v1/work-items/item-1/data",
   video_urls: {},

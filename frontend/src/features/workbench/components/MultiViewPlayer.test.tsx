@@ -18,6 +18,7 @@ const context: WorkContext = {
   episode_index: 0,
   length: 100,
   fps: 10,
+  preview_speed_factor: 1.3,
   tasks: ["pick"],
   data_url: "/data",
   video_urls: {

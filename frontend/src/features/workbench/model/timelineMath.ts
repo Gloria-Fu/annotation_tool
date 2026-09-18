@@ -1,6 +1,3 @@
-export const DEFAULT_PREVIEW_RATE = 1.3;
-export const DEFAULT_PREVIEW_TIME_SCALE = 1 / DEFAULT_PREVIEW_RATE;
-
 export function clampFrame(frame: number, length: number) {
   return Math.max(0, Math.min(length, Math.round(frame)));
 }

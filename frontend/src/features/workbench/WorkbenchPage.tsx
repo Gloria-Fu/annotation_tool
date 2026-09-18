@@ -23,7 +23,7 @@ import { useAutosave } from "./hooks/useAutosave";
 import { useVideoSync } from "./hooks/useVideoSync";
 import { canAnnotateItem, canReviewItem, isWorkbenchReadOnly } from "./workPermissions";
 import { createBlankSegment, createWorkbenchState, segmentReducer } from "./model/segmentReducer";
-import { DEFAULT_PREVIEW_TIME_SCALE, displaySeconds, formatFrameTime } from "./model/timelineMath";
+import { displaySeconds, formatFrameTime } from "./model/timelineMath";
 import { currentFineAnnotation, fineAnnotationText, templateIssues } from "./model/fineAnnotation";
 import { isSkillEnabled } from "./skillAvailability";
 import { GripperMarkModal, type GripperMarkSession } from "./components/GripperMarkModal";
@@ -112,7 +112,9 @@ export function WorkbenchPage() {
 
   const fps = Number(context?.fps || 30);
   const length = context?.length || 0;
-  const videoSync = useVideoSync(length, fps);
+  const previewSpeedFactor = Number(context?.preview_speed_factor || 1);
+  const previewTimeScale = 1 / previewSpeedFactor;
+  const videoSync = useVideoSync(length, fps, previewSpeedFactor);
   const selected = state.segments.find((segment) => segment.id === selectedId) || state.segments[0];
   const selectedFine = selected ? currentFineAnnotation(selected) : undefined;
   const canEditAnnotation = context ? canAnnotateItem(context.item, user.id) : false;
@@ -419,7 +421,7 @@ export function WorkbenchPage() {
             )}
           </span>
         }
-        subtitle={`${context.length} 帧 · ${displaySeconds(context.length, fps, DEFAULT_PREVIEW_TIME_SCALE).toFixed(2)} 秒`}
+        subtitle={`${context.length} 帧 · ${displaySeconds(context.length, fps, previewTimeScale).toFixed(2)} 秒`}
         leading={
           <button
             type="button"
@@ -466,7 +468,7 @@ export function WorkbenchPage() {
             currentFrame={videoSync.currentFrame}
             length={context.length}
             fps={fps}
-            displayTimeScale={DEFAULT_PREVIEW_TIME_SCALE}
+            displayTimeScale={previewTimeScale}
             zoom={zoom}
             rate={videoSync.rate}
             playing={videoSync.playing}
@@ -506,7 +508,7 @@ export function WorkbenchPage() {
             currentFrame={videoSync.currentFrame}
             length={context.length}
             fps={fps}
-            displayTimeScale={DEFAULT_PREVIEW_TIME_SCALE}
+            displayTimeScale={previewTimeScale}
             zoom={zoom}
             onSelect={onSelectSegment}
             onSeek={videoSync.syncFrame}
@@ -521,7 +523,7 @@ export function WorkbenchPage() {
           selected={selected}
           reviewing={reviewing}
           fps={fps}
-          displayTimeScale={DEFAULT_PREVIEW_TIME_SCALE}
+          displayTimeScale={previewTimeScale}
           currentFrame={videoSync.currentFrame}
           pointMarking={pointMarking}
           onBeginGripperMark={(hand, onConfirm) => {
@@ -627,7 +629,7 @@ export function WorkbenchPage() {
         <p>当前任务中的标注文字会清空并合并为一个完整片段，原始数据文件不会改变。</p>
       </Modal>
       <span className="sr-only">
-        {formatFrameTime(videoSync.currentFrame, fps, DEFAULT_PREVIEW_TIME_SCALE)}
+        {formatFrameTime(videoSync.currentFrame, fps, previewTimeScale)}
       </span>
     </div>
   );

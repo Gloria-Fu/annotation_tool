@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,7 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = False
     session_ttl_seconds: int = 28_800
     dataset_mount_root: Path = Path("/datasets")
+    annotation_preview_speed_factor: float = Field(default=1.3, gt=0)
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_password: str = "ChangeMe123!"
     bootstrap_admin_display_name: str = "研发管理员"
